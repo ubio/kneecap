@@ -1,0 +1,207 @@
+'use strict';
+
+const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
+
+const childProcess = require('child_process');
+const path = require('path');
+const net = require('net');
+const http = require('http');
+const request = require('request');
+const should = require('should');
+should;
+
+describe('integration', () => {
+    let _server, _proxyPid;
+    let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
+
+    function requestGET(headers) {
+        return request({
+            url: `http://localhost:${_server.address().port}/`,
+            proxy: `http://localhost:${PROXY_PORT}/`,
+            headers
+        });
+    }
+
+    before(() => {
+        return startProxy()
+            .then(pid => {
+                _proxyPid = pid;
+            });
+    });
+    beforeEach(() => {
+        return getListeningHttpServer()
+            .then(server => {
+                _server = server;
+                waitForRequest = new Promise((resolve, reject) => {
+                    server.on('request', (req, res) => {
+                        resolve({req, res});
+                    });
+                    server.on('clientError', reject);
+                });
+            });
+    });
+    afterEach(() => {
+        waitForRequest = Promise.reject(new Error('waitForRequest not set'));
+        return closeHttpServer(_server)
+            .then(() => {
+                _server = null;
+            });
+    });
+    after(() => {
+        return stopProxy(_proxyPid);
+    });
+
+    it('should forward requests', () => {
+        const myHeaderName = 'X-Test-Me';
+        const myHeaderValue = 'my-test-header';
+        const headers = {};
+        headers[myHeaderName] = myHeaderValue;
+        requestGET(headers);
+        return Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+
+                req.headers[myHeaderName.toLowerCase()].should.equal(myHeaderValue);
+            });
+    });
+
+    it('should remove request headers', () => {
+        const myHeaderName = 'X-Change-Me';
+        const myHeaderValue = 'my-test-header';
+        const headers = {};
+        headers[myHeaderName] = myHeaderValue;
+        requestGET(headers);
+        return Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+
+                should.not.exist(req.headers[myHeaderName.toLowerCase()]);
+            });
+    });
+
+    it('should change request headers', () => {
+        const myHeaderName = 'X-Change-Me';
+        const myHeaderValue = 'my-test-header';
+        const headers = {};
+        headers[myHeaderName] = myHeaderValue;
+        requestGET(headers);
+        return Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+
+                const expectedHeaderValue = 'my-changed-header';
+                req.headers[myHeaderName.toLowerCase()].should.equal(expectedHeaderValue);
+            });
+    });
+});
+
+function getListeningHttpServer() {
+    return Promise.resolve()
+        .then(() => {
+            const server = http.createServer();
+            server.listen(0);
+            return new Promise(resolve => {
+                server.on('listening', () => resolve(server));
+            });
+        });
+}
+
+function closeHttpServer(server) {
+    return Promise.resolve(server)
+        .then((server) => {
+            if (server) {
+                server.getConnections((err, count) => {
+                    console.log('asdqq', err, count);
+                });
+                return new Promise(resolve => {
+                    server.close(resolve);
+                });
+            }
+        });
+}
+
+function startProxy() {
+    const configPath = path.join(__dirname, 'squid.conf');
+    const proc = childProcess.spawn('squid3', ['-N', '-f', configPath, '-a', PROXY_PORT]);
+    return Promise.resolve(proc)
+        .then(proc => {
+            return waitForPortListening(PROXY_PORT)
+                .then(() => proc.pid);
+        });
+}
+
+function waitForPortListening(port) {
+    return retry(0);
+
+    function retry(attempt) {
+        if (attempt > 50) {
+            const err = new Error('waitForPortListening attempts limit reached');
+            throw err;
+        }
+        return assertPortListening(port)
+            .catch(() => {
+                return promiseTimeout(100)
+                    .then(() => {
+                        return retry(attempt + 1);
+                    });
+            });
+    }
+}
+
+function waitForPortNotListening(port) {
+    return retry(0);
+
+    function retry(attempt) {
+        if (attempt > 50) {
+            const err = new Error('waitForPortNotListening attempts limit reached');
+            throw err;
+        }
+        return assertPortNotListening(port)
+            .catch(() => {
+                return promiseTimeout(100)
+                    .then(() => {
+                        return retry(attempt + 1);
+                    });
+            });
+    }
+}
+
+function assertPortNotListening(port) {
+    return new Promise((resolve, reject) => {
+        const connection = new net.Socket();
+        connection.connect(port);
+        connection.on('error', resolve);
+        connection.on('connect', () => {
+            reject();
+            connection.end();
+        });
+    });
+}
+
+function assertPortListening(port) {
+    return new Promise((resolve, reject) => {
+        const connection = new net.Socket();
+        connection.connect(port);
+        connection.on('error', reject);
+        connection.on('connect', () => {
+            resolve();
+            connection.end();
+        });
+    });
+}
+
+function stopProxy(pid) {
+    childProcess.spawn('kill', ['-2', pid]);
+    return waitForPortNotListening(PROXY_PORT);
+}
+
+function promiseTimeout(time) {
+    return new Promise(resolve => setTimeout(resolve, time));
+}
+
