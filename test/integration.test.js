@@ -38,11 +38,10 @@ describe('integration', () => {
         return getListeningHttpServer()
             .then(server => {
                 _server = server;
-                waitForRequest = new Promise((resolve, reject) => {
+                waitForRequest = new Promise(resolve => {
                     server.on('request', (req, res) => {
                         resolve({req, res});
                     });
-                    server.on('clientError', reject);
                 });
             });
     });
@@ -63,9 +62,7 @@ describe('integration', () => {
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        icapServer.setRequestModifier(function() {
-            console.log('IN TEST icapServer request handler', arguments);
-        });
+        icapServer.removeRequestModifier();
         rGET(headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
@@ -77,7 +74,7 @@ describe('integration', () => {
             });
     });
 
-    it('should remove request headers', () => {
+    it('should change request headers', () => {
         const myHeaderName = 'X-Change-Me';
         const myHeaderValue = 'my-test-header';
         const headers = {};
@@ -99,15 +96,15 @@ describe('integration', () => {
             });
     });
 
-    it('should change request headers', () => {
+    it('should change request header values', () => {
         const myHeaderName = 'X-Change-Me';
-        const myHeaderValue = 'my-test-header';
+        const myHeaderValue = 'my-test-header-value';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
         icapServer.setRequestModifier(function(request) {
             const reqHeaders = request.getRequestHeaders();
             return {
-                reqHeaders: reqHeaders.replace(myHeaderValue, 'my-changed-header')
+                reqHeaders: reqHeaders.replace(myHeaderValue, 'my-changed-header-value')
             };
         });
         rGET(headers);
@@ -117,7 +114,7 @@ describe('integration', () => {
                 const res = result.res;
                 res.destroy();
 
-                const expectedHeaderValue = 'my-changed-header';
+                const expectedHeaderValue = 'my-changed-header-value';
                 req.headers[myHeaderName.toLowerCase()].should.equal(expectedHeaderValue);
             });
     });
