@@ -1,6 +1,7 @@
 'use strict';
 
 const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
+const ICAP_PORT = 8001; // Must be the same as icap_service in test/squid.conf
 
 const childProcess = require('child_process');
 const path = require('path');
@@ -9,12 +10,13 @@ const http = require('http');
 const request = require('request');
 const should = require('should');
 should;
+const kneecap = require('../index.js');
 
 describe('integration', () => {
-    let _server, _proxyPid;
+    let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
-    function requestGET(headers) {
+    function rGET(headers) {
         return request({
             url: `http://localhost:${_server.address().port}/`,
             proxy: `http://localhost:${PROXY_PORT}/`,
@@ -23,9 +25,13 @@ describe('integration', () => {
     }
 
     before(() => {
-        return startProxy()
-            .then(pid => {
-                _proxyPid = pid;
+        return createIcapServer()
+            .then(server => {
+                icapServer = server;
+                return startProxy();
+            })
+            .then(proxyPid => {
+                _proxyPid = proxyPid;
             });
     });
     beforeEach(() => {
@@ -42,6 +48,7 @@ describe('integration', () => {
     });
     afterEach(() => {
         waitForRequest = Promise.reject(new Error('waitForRequest not set'));
+        icapServer.removeRequestModifier();
         return closeHttpServer(_server)
             .then(() => {
                 _server = null;
@@ -51,12 +58,15 @@ describe('integration', () => {
         return stopProxy(_proxyPid);
     });
 
-    it('should forward requests', () => {
-        const myHeaderName = 'X-Test-Me';
+    it('should forward requests untouched', () => {
+        const myHeaderName = 'X-Change-Me';
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        requestGET(headers);
+        icapServer.setRequestModifier(function() {
+            console.log('IN TEST icapServer request handler', arguments);
+        });
+        rGET(headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -72,7 +82,13 @@ describe('integration', () => {
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        requestGET(headers);
+        icapServer.setRequestModifier(function(request) {
+            const reqHeaders = request.getRequestHeaders();
+            return {
+                reqHeaders: reqHeaders.replace(myHeaderName, `${myHeaderName}-Changed`)
+            };
+        });
+        rGET(headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -88,7 +104,13 @@ describe('integration', () => {
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        requestGET(headers);
+        icapServer.setRequestModifier(function(request) {
+            const reqHeaders = request.getRequestHeaders();
+            return {
+                reqHeaders: reqHeaders.replace(myHeaderValue, 'my-changed-header')
+            };
+        });
+        rGET(headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -100,6 +122,10 @@ describe('integration', () => {
             });
     });
 });
+
+function createIcapServer() {
+    return Promise.resolve(kneecap(ICAP_PORT));
+}
 
 function getListeningHttpServer() {
     return Promise.resolve()
@@ -116,9 +142,6 @@ function closeHttpServer(server) {
     return Promise.resolve(server)
         .then((server) => {
             if (server) {
-                server.getConnections((err, count) => {
-                    console.log('asdqq', err, count);
-                });
                 return new Promise(resolve => {
                     server.close(resolve);
                 });
