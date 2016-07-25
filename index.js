@@ -80,7 +80,6 @@ function handleBadRequest(connection) {
 
 const handlers = Object.freeze({
     'REQMOD/request': (connection, request) => {
-        console.log('got REQMOD/request');
         return Promise.resolve(_requestModifier(request))
             .then(modifiedRequest => {
                 if (!modifiedRequest) {
@@ -95,7 +94,6 @@ const handlers = Object.freeze({
             });
     },
     'OPTIONS/request': connection => {
-        console.log('got OPTIONS/request');
         const headers = [
             ['Methods', 'REQMOD']
         ];
