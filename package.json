@@ -21,6 +21,7 @@
     "devDependencies": {
         "mocha": "2.5.x",
         "should": "10.0.x",
-        "request": "2.73.x"
+        "request": "2.73.x",
+        "body-parser": "1.15.x"
     }
 }

@@ -10,7 +10,7 @@ const FILETYPE_IGNORE = [
     'asp', 'css', 'swf', 'mp3', 'wav', 'gif', 'jpg', 'jpeg',
 ];
 const FILETYPE_PREVIEW = ['js']; // ['json', 'html', 'js'];
-const PREVIEW_BYTES = 128;
+const PREVIEW_BYTES = 0;
 
 // Is there a point in having chainable middleware?
 // For now, single request modifier should suffice
@@ -88,8 +88,8 @@ const handlers = Object.freeze({
                 return Promise.resolve(connection.respond({
                     statusCode: 200,
                     statusText: 'OK',
-                    reqHeaders: modifiedRequest.reqHeaders,
-                    reqBody: modifiedRequest.reqBody
+                    reqHeaders: modifiedRequest.reqHeaders || request.getRequestHeaders(),
+                    reqBody: modifiedRequest.reqBody || request.getRequestBody()
                 }));
             });
     },

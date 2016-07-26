@@ -8,6 +8,10 @@ const path = require('path');
 const net = require('net');
 const http = require('http');
 const request = require('request');
+const bodyParser = require('body-parser');
+const urlencodedParser = bodyParser.urlencoded({
+    extended: false
+});
 const should = require('should');
 should;
 const kneecap = require('../index.js');
@@ -16,11 +20,31 @@ describe('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
+    function initializeWaitForRequest(server) {
+        waitForRequest = new Promise(resolve => {
+            server.on('request', (req, res) => {
+                urlencodedParser(req, res, () => {
+                    resolve({req, res});
+                });
+            });
+        });
+    }
+
     function rGET(headers) {
         return request({
             url: `http://localhost:${_server.address().port}/`,
             proxy: `http://localhost:${PROXY_PORT}/`,
             headers
+        });
+    }
+
+    function rPOST(headers, form) {
+        return request({
+            url: `http://localhost:${_server.address().port}/`,
+            proxy: `http://localhost:${PROXY_PORT}/`,
+            method: 'POST',
+            headers,
+            form
         });
     }
 
@@ -38,11 +62,7 @@ describe('integration', () => {
         return getListeningHttpServer()
             .then(server => {
                 _server = server;
-                waitForRequest = new Promise(resolve => {
-                    server.on('request', (req, res) => {
-                        resolve({req, res});
-                    });
-                });
+                initializeWaitForRequest(server);
             });
     });
     afterEach(() => {
@@ -99,12 +119,13 @@ describe('integration', () => {
     it('should change request header values', () => {
         const myHeaderName = 'X-Change-Me';
         const myHeaderValue = 'my-test-header-value';
+        const expectedHeaderValue = 'my-changed-header-value';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
         icapServer.setRequestModifier(function(request) {
             const reqHeaders = request.getRequestHeaders();
             return {
-                reqHeaders: reqHeaders.replace(myHeaderValue, 'my-changed-header-value')
+                reqHeaders: reqHeaders.replace(myHeaderValue, expectedHeaderValue)
             };
         });
         rGET(headers);
@@ -114,8 +135,35 @@ describe('integration', () => {
                 const res = result.res;
                 res.destroy();
 
-                const expectedHeaderValue = 'my-changed-header-value';
                 req.headers[myHeaderName.toLowerCase()].should.equal(expectedHeaderValue);
+            });
+    });
+
+    it('should change request body values', () => {
+        const myFormKey = 'testkey';
+        const myFormValue = 'testvalue';
+        const expectedBodyValue = 'changedtestvalue';
+        const form = {};
+        form[myFormKey] = myFormValue;
+        icapServer.setRequestModifier(function(request) {
+            return request.getRequestBody()
+                .then(reqBody => {
+                    const reqHeaders = request.getRequestHeaders();
+                    const diff = expectedBodyValue.length - myFormValue.length;
+                    const oldContentLength = Number(reqHeaders.match(/content-length: (\d+)/i)[1]);
+                    return {
+                        reqBody: reqBody.replace(myFormValue, expectedBodyValue),
+                        reqHeaders: reqHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
+                    };
+                });
+        });
+        rPOST(undefined, form);
+        return Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+                req.body[myFormKey].should.equal(expectedBodyValue);
             });
     });
 });
