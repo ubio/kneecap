@@ -166,6 +166,31 @@ describe('integration', () => {
                 req.body[myFormKey].should.equal(expectedBodyValue);
             });
     });
+
+    it('should change large request body values', () => {
+        const form = getLargeObject();
+        const expectedBody = 'replaced=value';
+        icapServer.setRequestModifier(function(request) {
+            const headers = request.getRequestHeaders();
+            const contentLength = expectedBody.length;
+            return {
+                reqBody: expectedBody,
+                reqHeaders: headers.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
+            };
+        });
+        rPOST(undefined, form);
+        return Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+                req.body.replaced.should.equal('value');
+            });
+
+        function getLargeObject() {
+            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(999)) && prev, {});
+        }
+    });
 });
 
 function createIcapServer() {
