@@ -7,6 +7,7 @@ const childProcess = require('child_process');
 const path = require('path');
 const net = require('net');
 const http = require('http');
+const qs = require('querystring');
 const request = require('request');
 const bodyParser = require('body-parser');
 const urlencodedParser = bodyParser.urlencoded({
@@ -189,6 +190,30 @@ describe('integration', () => {
 
         function getLargeObject() {
             return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(999)) && prev, {});
+        }
+    });
+
+    it('should correctly parse large request bodies', done => {
+        const form = getLargeObject();
+        icapServer.setRequestModifier(function(request) {
+            request.getRequestBody()
+                .then(body => {
+                    Object.keys(qs.parse(body)).length.should.equal(Object.keys(form).length);
+                    done();
+                })
+                .catch(done);
+        });
+        rPOST(undefined, form);
+        Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+                req.body.replaced.should.equal('value');
+            });
+
+        function getLargeObject() {
+            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(99)) && prev, {});
         }
     });
 });
