@@ -88,7 +88,7 @@ describe('transaction', () => {
         });
     });
 
-    describe.only('parsing encapsulated body', () => {
+    describe('parsing encapsulated body', () => {
         it('should parse preview body', (done) => {
             _client.write(getIcapREQMODPreview());
             _connection.events.on('end', parsed => {
