@@ -10,7 +10,7 @@ const FILETYPE_IGNORE = [
     'asp', 'css', 'swf', 'mp3', 'wav', 'gif', 'jpg', 'jpeg',
 ];
 const FILETYPE_PREVIEW = ['*']; // ['json', 'html', 'js'];
-const PREVIEW_BYTES = 0;
+const PREVIEW_BYTES = 10;
 
 // Is there a point in having chainable middleware?
 // For now, single request modifier should suffice
