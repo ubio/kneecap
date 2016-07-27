@@ -4,13 +4,13 @@ const net = require('net');
 
 const connectionConstructor = require('./lib/connection.js');
 
-const FILETYPE_COMPLETE = ['*'];
+const FILETYPE_COMPLETE = ['html'];
 const FILETYPE_IGNORE = [
     'bat', 'exe', 'com', 'bin', 'pkg', 'gz', 'zip', 'ogg',
     'asp', 'css', 'swf', 'mp3', 'wav', 'gif', 'jpg', 'jpeg',
 ];
-const FILETYPE_PREVIEW = ['js']; // ['json', 'html', 'js'];
-const PREVIEW_BYTES = 4096;
+const FILETYPE_PREVIEW = ['*']; // ['json', 'html', 'js'];
+const PREVIEW_BYTES = 0;
 
 // Is there a point in having chainable middleware?
 // For now, single request modifier should suffice
