@@ -1,9 +1,9 @@
 'use strict';
 
 const net = require('net');
-const createConnection = require('../src/connection.js');
+const createConnection = require('../src/transaction.js');
 
-describe('connection', () => {
+describe('transaction', () => {
     let _server, _client, _connection;
     beforeEach((done) => {
         return getListeningServer()

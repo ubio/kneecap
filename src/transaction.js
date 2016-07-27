@@ -16,14 +16,22 @@ module.exports = function(socket) {
 
     const events = new EventEmitter();
     let received = new Buffer(0);
+    let fullBodyPromise = null;
+    let canReceiveMore = false;
 
     const parsed = {
         icapDetails: undefined,
         encapsulated: new Map() // Map { 'req-hdr': Buffer(), 'req-body': Buffer() }
     };
 
+    events.on('finished', () => {
+        socket.removeListener('data', handleSocketData);
+    });
+
     return Object.freeze({
-        events
+        events,
+        getEncapsulatedSection,
+        getFullBody
     });
 
     function handleSocketData(data) {
@@ -67,6 +75,7 @@ module.exports = function(socket) {
                         //     content: Buffer,
                         //     remainingIx: Number
                         // }
+                        events.emit('part-parsed');
                         parsed.encapsulated.set(key, parsedPart.content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
@@ -75,18 +84,23 @@ module.exports = function(socket) {
                     }
                 }
             }
-            console.log('asdqq remaining received', received);
+            // console.log('asdqq remaining received', received);
             if (received.length === 0 && parsed.icapDetails.encapsulated.has('null-body')) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
                 events.emit('end', parsed);
             }
             if (isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_PREVIEW_TERMINATOR)) {
                 // Got preview according to preview header
+                // We can reply with 100 CONTINUE
+                if (canReceiveMore) {
+                    canReceiveMore = false;
+                } else {
+                    canReceiveMore = true;
+                }
                 events.emit('end', parsed);
             }
-
-
             if (isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_ZERO_BYTE)) {
+                // We can NOT reply with 100 CONT
                 events.emit('end', parsed);
             }
             if (!isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_PREVIEW_TERMINATOR)) {
@@ -95,6 +109,39 @@ module.exports = function(socket) {
         } else {
             events.emit('end', parsed);
         }
+    }
+
+    function getEncapsulatedSection(name) {
+        return parsed.encapsulated.get(name);
+    }
+
+    function getFullBody() {
+        const section = Array.from(parsed.encapsulated.keys()).find(key => isBody(key));
+        if ('null-body' === section) {
+            return Promise.resolve();
+        }
+        if (fullBodyPromise) {
+            return fullBodyPromise;
+        }
+        fullBodyPromise = new Promise(resolve => {
+            const data = getEncapsulatedSection(section);
+            if (canReceiveMore) {
+                events.on('end', getFullBodyEndHandler);
+                return getMore();
+            }
+            return resolve(data);
+
+            function getFullBodyEndHandler() {
+                resolve(getEncapsulatedSection(section));
+            }
+        });
+        return fullBodyPromise;
+    }
+
+    function getMore() {
+        // TODO: set canReceiveMore to false
+        // Maybe check that boolean in here, for sanity?
+        socket.write('100 CONTINUE\r\n\r\n');
     }
 };
 
