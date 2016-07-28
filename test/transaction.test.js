@@ -5,6 +5,7 @@ const createConnection = require('../src/transaction.js');
 
 describe('transaction', () => {
     let _server, _client, _connection;
+    
     beforeEach((done) => {
         return getListeningServer()
             .then(server => {

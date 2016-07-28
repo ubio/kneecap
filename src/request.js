@@ -7,9 +7,11 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
         hasResponseHeaders,
         hasResponseBody,
         getRequestHeaders,
-        getRequestBody,
+        getRawRequestHeaders,
+        getRawRequestBody,
         getResponseHeaders,
-        getResponseBody
+        getRawResponseHeaders,
+        getRawResponseBody
     });
 
     function hasRequestHeaders() {
@@ -36,57 +38,38 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
         return getHeaders('res-hdr');
     }
 
-    function getHeaders(section) {
-        if (!icapDetails.encapsulated.has(section)) {
-            return Promise.resolve('');
-        }
-        const data = transaction.getEncapsulatedSection(section);
-        if (data) {
-            return Promise.resolve(parseHeaders(data));
-        }
-        return onEvent(section)
-            .then(data => {
-                return parseHeaders(data);
-            });
+    function getRawRequestHeaders() {
+        return getRawHeaders('req-hdr');
     }
 
-    function getRequestBody() {
-        return getBody('req-body');
+    function getRawResponseHeaders() {
+        return getRawHeaders('res-hdr');
     }
 
-    function getResponseBody() {
-        return getBody('res-body');
+    function getHeaders(name) {
+        return getRawHeaders(name)
+            .then(buffer => parseHeaders(buffer));
     }
 
-    function getBody(section) {
+    function getRawHeaders(section) {
+        return transaction.waitForEncapsulatedSection(section);
+    }
+    
+    function getRawRequestBody() {
+        return getRawBody('req-body');
+    }
+
+    function getRawResponseBody() {
+        return getRawBody('res-body');
+    }
+
+    function getRawBody(section) {
         if (!icapDetails.encapsulated.has(section)) {
             return Promise.resolve('');
         }
         return transaction.getFullBody();
     }
-
-    function onEvent(section) {
-        return new Promise((resolve, reject) => {
-            transaction.events.on('socket-closed', handleSocketClose);
-            transaction.events.on(section, handleSection);
-            function handleSection(data) {
-                cleanup();
-                resolve(data);
-            }
-            function handleSocketClose() {
-                cleanup();
-                const err = new Error('Socket closed while waiting for section');
-                err.details = {
-                    section
-                };
-                reject(err);
-            }
-            function cleanup() {
-                transaction.events.removeListener('socket-closed', handleSocketClose);
-                transaction.events.removeListener(section, handleSection);
-            }
-        });
-    }
+    
 };
 
 function parseHeaders(buffer) {

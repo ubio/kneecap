@@ -3,6 +3,12 @@
 const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
 const ICAP_PORT = 8001; // Must be the same as icap_service in test/squid.conf
 
+// const PROXY_HOST = 'localhost';
+const PROXY_HOST = '192.168.99.100';
+
+// const PROXY_URL = `http://localhost:${PROXY_PORT}/`;
+const PROXY_URL = `http://${PROXY_HOST}:${PROXY_PORT}/`;
+
 const childProcess = require('child_process');
 const path = require('path');
 const net = require('net');
@@ -17,7 +23,7 @@ const should = require('should');
 should;
 const kneecap = require('../index.js');
 
-describe('integration', () => {
+describe.only('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
@@ -34,7 +40,7 @@ describe('integration', () => {
     function rGET(headers) {
         return request({
             url: `http://localhost:${_server.address().port}/`,
-            proxy: `http://localhost:${PROXY_PORT}/`,
+            proxy: PROXY_URL,
             headers
         });
     }
@@ -42,7 +48,7 @@ describe('integration', () => {
     function rPOST(headers, form) {
         return request({
             url: `http://localhost:${_server.address().port}/`,
-            proxy: `http://localhost:${PROXY_PORT}/`,
+            proxy: PROXY_URL,
             method: 'POST',
             headers,
             form
@@ -53,11 +59,11 @@ describe('integration', () => {
         return createIcapServer()
             .then(server => {
                 icapServer = server;
-                return startProxy();
-            })
-            .then(proxyPid => {
-                _proxyPid = proxyPid;
+                // return startProxy();
             });
+            // .then(proxyPid => {
+            //     _proxyPid = proxyPid;
+            // });
     });
     beforeEach(() => {
         return getListeningHttpServer()
@@ -74,9 +80,9 @@ describe('integration', () => {
                 _server = null;
             });
     });
-    after(() => {
-        return stopProxy(_proxyPid);
-    });
+    // after(() => {
+    //     return stopProxy(_proxyPid);
+    // });
 
     it('should forward requests untouched', () => {
         const myHeaderName = 'X-Change-Me';
@@ -245,8 +251,10 @@ function closeHttpServer(server) {
 }
 
 function startProxy() {
-    const configPath = path.join(__dirname, 'squid.conf');
-    const proc = childProcess.spawn('squid3', ['-N', '-f', configPath, '-a', PROXY_PORT]);
+    //const configPath = path.join(__dirname, 'squid.conf');
+    //const proc = childProcess.spawn('squid3', ['-N', '-f', configPath, '-a', PROXY_PORT]);
+    const proc = childProcess.spawn('docker',
+        ['run', '--net=host', '--name=roxi-squid', 'universalbasket/roxi-squid']);
     return Promise.resolve(proc)
         .then(proc => {
             return waitForPortListening(PROXY_PORT)
@@ -293,7 +301,7 @@ function waitForPortNotListening(port) {
 function assertPortNotListening(port) {
     return new Promise((resolve, reject) => {
         const connection = new net.Socket();
-        connection.connect(port);
+        connection.connect(port, PROXY_HOST);
         connection.on('error', resolve);
         connection.on('connect', () => {
             reject();
@@ -305,7 +313,7 @@ function assertPortNotListening(port) {
 function assertPortListening(port) {
     return new Promise((resolve, reject) => {
         const connection = new net.Socket();
-        connection.connect(port);
+        connection.connect(port, PROXY_HOST);
         connection.on('error', reject);
         connection.on('connect', () => {
             resolve();
@@ -316,6 +324,7 @@ function assertPortListening(port) {
 
 function stopProxy(pid) {
     childProcess.spawn('kill', ['-2', pid]);
+    childProcess.spawn('docker', ['rm', '-f', 'roxi-squid']);
     return waitForPortNotListening(PROXY_PORT);
 }
 

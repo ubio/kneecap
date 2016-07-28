@@ -4,6 +4,8 @@ const EventEmitter = require('events').EventEmitter;
 const Buffer = require('buffer').Buffer;
 const url = require('url');
 
+const createResponse = require('./response.js');
+
 const SINGLE_BLANK = new Buffer('\r\n\r\n');
 const CHUNK_SEPARATOR = Buffer.from('\r\n');
 const BODY_PREVIEW_TERMINATOR = Buffer.from('0\r\n\r\n');
@@ -30,9 +32,12 @@ module.exports = function(socket) {
 
     return Object.freeze({
         events,
-        getEncapsulatedSection,
         hasEncapsulatedSection,
-        getFullBody
+        getFullBody,
+        waitForEncapsulatedSection,
+        respond,
+        dontChange,
+        badRequest
     });
 
     function hasEncapsulatedSection(section) {
@@ -124,7 +129,7 @@ module.exports = function(socket) {
     }
 
     function getFullBody() {
-        const section = Array.from(parsed.encapsulated.keys()).find(key => isBody(key));
+        const section = getEncapsulatedBodyType();
         if ('null-body' === section) {
             return Promise.resolve();
         }
@@ -151,6 +156,77 @@ module.exports = function(socket) {
         // Maybe check that boolean in here, for sanity?
         socket.write('100 CONTINUE\r\n\r\n');
     }
+    
+    function dontChange() {
+        const allow = parsed.icapDetails.icapHeaders.get('allow') || '';
+        if (allow.includes('204')) {
+            return respond({
+                statusCode: 204,
+                statusText: 'No Content'
+            });
+        }
+        const promises = Array.from(parsed.icapDetails.encapsulated.keys())
+            .filter(section => section.indexOf('-hdr') > -1)
+            .map(section => waitForEncapsulatedSection(section));
+        const bodyType = getEncapsulatedBodyType();
+        if (bodyType !== 'null-body') {
+            promises.push(getFullBody());
+        }
+        return Promise.all(promises)
+            .then(() => respond({
+                statusCode: 200,
+                statusText: 'OK',
+                payload: parsed.encapsulated
+            }));
+    }
+    
+    function badRequest() {
+        return respond({
+            statusCode: 400,
+            statusText: 'Bad Request'
+        });
+    }
+
+    function respond(spec) {
+        socket.write(createResponse(spec).toBuffer());
+    }
+
+    function waitForEncapsulatedSection(section) {
+        if (!parsed.icapDetails.encapsulated.has(section)) {
+            return Promise.resolve(Buffer.alloc(0));
+        }
+        const data = getEncapsulatedSection(section);
+        if (data) {
+            return Promise.resolve(data);
+        }
+        return new Promise((resolve, reject) => {
+            // TODO do not forget about socket-closed
+            events.on('socket-closed', handleSocketClose);
+            events.on(section, handleSection);
+            function handleSection(data) {
+                cleanup();
+                resolve(data);
+            }
+            function handleSocketClose() {
+                cleanup();
+                const err = new Error('Socket closed while waiting for section');
+                err.details = {
+                    section
+                };
+                reject(err);
+            }
+            function cleanup() {
+                events.removeListener('socket-closed', handleSocketClose);
+                events.removeListener(section, handleSection);
+            }
+        });
+    }
+
+    function getEncapsulatedBodyType() {
+        const keys = Array.from(parsed.icapDetails.encapsulated.keys());
+        return keys.find(type => isBody(type));
+    }
+
 };
 
 function isPreviewMode(icapHeaders) {
