@@ -88,20 +88,20 @@ module.exports = function(socket) {
                         //     content: Buffer,
                         //     remainingIx: Number
                         // }
-                        parsed.encapsulated.set(key, parsedPart.content);
-                        events.emit(key);
-                        console.log('emit', key);
+                        const content = parsedPart.content;
+                        parsed.encapsulated.set(key, content);
+                        events.emit(key, content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
-                        console.log('thrown', e);
+                        console.log('try/catch thrown', e, received.toString());
                         return;
                     }
                 }
             }
-            // console.log('asdqq remaining received', received);
             if (received.length === 0 && parsed.icapDetails.encapsulated.has('null-body')) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
                 events.emit('end', parsed);
+                return;
             }
             if (isPreviewMode()) {
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
@@ -117,10 +117,12 @@ module.exports = function(socket) {
                     events.emit('end', parsed);
                 } else {
                     // We need more data
-                    console.log('more data (preview)');
+                    console.log('more data (preview)', received);
                     return;
                 }
             } else {
+                // Not preview mode
+                events;
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
                     events.emit('end', parsed);
                 } else {
@@ -166,10 +168,10 @@ module.exports = function(socket) {
     function getMore() {
         // TODO: set canReceiveMore to false
         // Maybe check that boolean in here, for sanity?
-        console.log('100 continue');
+        console.log('writing to socket 100 continue');
         socket.write('100 CONTINUE\r\n\r\n');
     }
-    
+
     function dontChange() {
         const allow = parsed.icapDetails.icapHeaders.get('allow') || '';
         if (allow.includes('204')) {
@@ -194,7 +196,7 @@ module.exports = function(socket) {
                 });
             });
     }
-    
+
     function badRequest() {
         return respond({
             statusCode: 400,
@@ -205,7 +207,6 @@ module.exports = function(socket) {
     function respond(spec) {
         const buffer = createResponse(spec).toBuffer();
         socket.write(buffer);
-        console.log(buffer.toString());
         finish();
     }
 
@@ -276,6 +277,12 @@ function parseEncapsulatedBody(received) {
 }
 
 function dechunk(buffer) {
+    if (buffer.length === 0) {
+        return {
+            chunk: new Buffer(0),
+            remaining: buffer
+        };
+    }
     const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
     const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
     if (chunkSize === 0) {

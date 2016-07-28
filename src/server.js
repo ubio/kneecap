@@ -42,7 +42,7 @@ module.exports = function createServer(options) {
             _server.listen(...args.concat(resolve));
         });
     }
-    
+
     function close() {
         _server.close();
     }
@@ -58,7 +58,6 @@ module.exports = function createServer(options) {
         currentTransaction.events.on('finished', finishedHandler);
 
         function finishedHandler() {
-            console.log('Transacton finished');
             currentTransaction = createIcapTransaction(socket);
             handleTransaction(currentTransaction);
         }
@@ -66,7 +65,6 @@ module.exports = function createServer(options) {
 
     function handleTransaction(transaction) {
         transaction.events.on('icap-headers', icapDetails => {
-            console.log('=>', icapDetails);
             const handler = handlers[icapDetails.path];
             if (!handler) {
                 return transaction.badRequest();
@@ -87,23 +85,27 @@ module.exports = function createServer(options) {
                         return transaction.dontChange();
                     }
                     return Promise.all([
-                        sanitizeRequestHeaders(response.reqHeaders, icapRequest),
-                        sanitizeResponseHeaders(response.respHeaders, icapRequest),
-                        sanitizeRequestBody(response.reqBody, icapRequest),
-                        sanitizeResponseBody(response.reqBody, icapRequest),
+                        sanitizeRequestHeaders(response.requestHeaders, icapRequest),
+                        sanitizeResponseHeaders(response.responseHeaders, icapRequest),
+                        sanitizeRequestBody(response.requestBody, icapRequest),
+                        sanitizeResponseBody(response.responseBody, icapRequest),
                     ])
                         .then(results => {
                             const [
-                                reqHeaders,
-                                respHeaders,
-                                reqBody,
-                                respBody
+                                requestHeaders,
+                                responseHeaders,
+                                requestBody,
+                                responseBody
                             ] = results;
                             transaction.respond({
-                                reqHeaders,
-                                respHeaders,
-                                reqBody,
-                                respBody
+                                statusCode: 200,
+                                statusText: 'OK',
+                                payload: new Map([
+                                    ['req-hdr', requestHeaders],
+                                    ['res-hdr', responseHeaders],
+                                    ['req-body', requestBody],
+                                    ['res-body', responseBody]
+                                ])
                             });
                         });
                 })

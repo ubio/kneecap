@@ -6,6 +6,8 @@ const ENCAPSULATED_BODIES = ['opt-body', 'req-body', 'res-body'];
 const CHUNK_SEPARATOR = Buffer.from('\r\n');
 const PAYLOAD_SEPARATOR = Buffer.from('\r\n\r\n');
 
+const mandatoryIcapHeaders = [['ISTag', 'kneecap-itag'], ['Date', new Date().toGMTString()]];
+
 module.exports = function createResponse(data) {
 
     const statusCode = data.statusCode; // Number
@@ -30,6 +32,11 @@ module.exports = function createResponse(data) {
         const line1 = `ICAP/1.0 ${statusCode} ${statusText}`;
         lines.push(line1);
 
+        mandatoryIcapHeaders.forEach(element => {
+            if (!icapHeaders.has(element[0])) {
+                icapHeaders.set(element[0], element[1]);
+            }
+        });
         icapHeaders.forEach((value, key) => {
             const line = `${key}: ${value}`;
             lines.push(line);
@@ -143,13 +150,15 @@ function getEncapsulatedData(payload) {
     };
     let foundBody = false;
     ENCAPSULATED_HEADERS.forEach(tag => {
-        if (payload.has(tag)) {
-            addEncapsulatedHeaderPayload(encapsulatedData, tag, payload.get(tag));
+        const content = payload.get(tag);
+        if (content) {
+            addEncapsulatedHeaderPayload(encapsulatedData, tag, content);
         }
     });
     ENCAPSULATED_BODIES.forEach(tag => {
-        if (payload.has(tag)) {
-            addEncapsulatedBodyPayload(encapsulatedData, tag, payload.get(tag));
+        const content = payload.get(tag);
+        if (content) {
+            addEncapsulatedBodyPayload(encapsulatedData, tag, content);
             foundBody = true;
         }
     });

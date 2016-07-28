@@ -54,7 +54,7 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
     function getRawHeaders(section) {
         return transaction.waitForEncapsulatedSection(section);
     }
-    
+
     function getRawRequestBody() {
         return getRawBody('req-body');
     }
@@ -69,7 +69,7 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
         }
         return transaction.getFullBody();
     }
-    
+
 };
 
 function parseHeaders(buffer) {
