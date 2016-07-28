@@ -2,11 +2,31 @@
 
 module.exports = function createIcapRequest(icapDetails, transaction) {
     return Object.freeze({
+        hasRequestHeaders,
+        hasRequestBody,
+        hasResponseHeaders,
+        hasResponseBody,
         getRequestHeaders,
         getRequestBody,
         getResponseHeaders,
         getResponseBody
     });
+
+    function hasRequestHeaders() {
+        return transaction.hasEncapsulatedSection('req-hdr');
+    }
+
+    function hasRequestBody() {
+        return transaction.hasEncapsulatedSection('req-body');
+    }
+
+    function hasResponseHeaders() {
+        return transaction.hasEncapsulatedSection('res-hdr');
+    }
+
+    function hasResponseBody() {
+        return transaction.hasEncapsulatedSection('res-body');
+    }
 
     function getRequestHeaders() {
         return getHeaders('req-hdr');

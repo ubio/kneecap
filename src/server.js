@@ -52,16 +52,17 @@ module.exports = function createServer(options, listenOptions) {
             const handler = handlers[method][path];
 
             if ('function' === typeof handler) {
-                return handler(createIcapRequest(icapDetails, transaction))
+                const icapRequest = createIcapRequest(icapDetails, transaction);
+                return handler(icapRequest)
                     .then(response => {
                         if (!response) {
                             transaction.dontChange();
                         }
                         return Promise.all([
-                            getHeaders(response.reqHeaders, transaction),
-                            getHeaders(response.respHeaders, transaction),
-                            getBody(response.reqBody, transaction),
-                            getBody(response.reqBody, transaction),
+                            sanitizeRequestHeaders(response.reqHeaders, icapRequest),
+                            sanitizeResponseHeaders(response.respHeaders, icapRequest),
+                            sanitizeRequestBody(response.reqBody, icapRequest),
+                            sanitizeResponseBody(response.reqBody, icapRequest),
                         ]);
                     })
                     .then(results => {
@@ -109,86 +110,28 @@ module.exports = function createServer(options, listenOptions) {
     }
 };
 
-/**
- * Resolve each pending promise property
- *
- * @param {Object} obj - object containing pending promises as props
- * @returns {Promise}
- */
-function resolveObjectProps(obj) {
-    if (!obj) {
-        return Promise.resolve(obj);
+function sanitizeRequestHeaders(headers, icapRequest) {
+    if (!headers) {
+        if (!icapRequest.hasRequestHeaders()) {
+            return;
+        }
     }
-    return Promise.all(Object.keys(obj)
-        .map(key => Promise.resolve(obj[key])
-            .then(val => [key, val]))
-    )
-        .then(all => all.reduce((prev, curr) => (prev[curr[0]] = curr[1], prev), {}));
 }
 
-server.on('connection', socket => {
-    let icapTransaction = createIcapTransaction(socket);
-    icapTransaction.on('finished', () => {
-        // remove icapTransaction from socket
-        // new icapTransaction, bind events
-        icapTransaction = createIcapTransaction(socket);
-    });
-
-    icapTransaction.on('icap-headers', (icapDetails) => {
-        // OPTIONS
-        // -> /request
-        // -> Tranfer-Preview
-        // -> Tranfer-Ignore
-        //
-        // REQMOD
-        // -> path
-        //
-        // getRequestBody()
-        // -> toString(Content-Type)
-        //
-        // -> null return -> Allow 206 ? send 206 : grab body and send full
-        // -> header -> grab body and send full
-        // -> body/header -> grab body and send full
-    });
-});
-
-return Object.freeze({
-    requestHandler,
-    responseHandler
-});
-
-function requestHandler(path, handler) {
-    registerPath();
-    return Promise.resolve(handler())
-        .then(result => {
-        })
-        .catch(() => {
-        });
+function sanitizeResponseHeaders(headers, icapRequest) {
+    if (!headers && !icapRequest.hasResponseHeaders()) {
+        return;
+    }
 }
 
+function sanitizeRequestBody(body, icapRequest) {
+    if (!body && !icapRequest.hasRequestBody()) {
+        return;
+    }
+}
 
-/**
- *
- * http headers <= 8KB
- *
- */
-
-server.requestHandler('/request', icapRequest => {
-    return icapRequest.getRequestBody()
-    return icapRequest.getRequestHeaders()
-        .then(headers => {
-            return icapRequest.getRequestBody();
-        })
-        .then(body => {
-            return null;
-            return {
-                reqHeaders: myNewHeaders
-            };
-        });
-});
-
-server.responseHandler('/response', icapRequest => {
-    return icapRequest.getRequestHeaders()
-    return icapRequest.getResponseHeaders()
-    return icapRequest.getResponseBody();
-});
+function sanitizeResponseBody(body, icapRequest) {
+    if (!body && !icapRequest.hasResponseBody()) {
+        return;
+    }
+}

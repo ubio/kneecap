@@ -31,8 +31,16 @@ module.exports = function(socket) {
     return Object.freeze({
         events,
         getEncapsulatedSection,
+        hasEncapsulatedSection,
         getFullBody
     });
+
+    function hasEncapsulatedSection(section) {
+        const encapsulated = parsed.icapDetails.encapsulated;
+        if (encapsulated) {
+            return encapsulated.has(section);
+        }
+    }
 
     function handleSocketData(data) {
         received = Buffer.concat([received, data]);
@@ -169,7 +177,6 @@ function parseEncapsulatedBody(received) {
 }
 
 function dechunk(buffer) {
-    console.log('dechunk', buffer.toString());
     const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
     const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
     if (chunkSize === 0) {

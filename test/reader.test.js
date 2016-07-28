@@ -4,7 +4,7 @@ const EventEmitter = require('events').EventEmitter;
 
 const createReader = require('../src/reader');
 
-describe.only('Socket reader', () => {
+describe('Socket reader', () => {
 
     let socket = null;
 
@@ -49,14 +49,14 @@ describe.only('Socket reader', () => {
         }
     });
 
-    it.only('should reject concurrent read attempts', done => {
+    it('should reject concurrent read attempts', done => {
         const reader = createReader(socket, 200);
         const firstRead = reader.readUpTo(buf => buf.indexOf(Buffer.from('\n')));
         reader.readUpTo(buf => buf.indexOf(Buffer.from('\n')));
         socket.emit('data', Buffer.from('Hello\nWorld'));
         firstRead.then(() => {
             done(new Error('Unexpected'));
-        }, err => done());
+        }, () => done());
     });
 
 });
@@ -67,8 +67,4 @@ function createFakeSocket() {
         socket.emit('close');
     };
     return socket;
-}
-
-function timeout(timeout) {
-    return new Promise(resolve => setTimeout(resolve, timeout));
 }
