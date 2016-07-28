@@ -23,7 +23,7 @@ const should = require('should');
 should;
 const kneecap = require('../index.js');
 
-describe.only('integration', () => {
+describe('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
@@ -39,7 +39,7 @@ describe.only('integration', () => {
 
     function rGET(headers) {
         return request({
-            url: `http://localhost:${_server.address().port}/`,
+            url: `http://192.168.0.2:${_server.address().port}/`,
             proxy: PROXY_URL,
             headers
         });
@@ -47,7 +47,7 @@ describe.only('integration', () => {
 
     function rPOST(headers, form) {
         return request({
-            url: `http://localhost:${_server.address().port}/`,
+            url: `http://192.168.0.2:${_server.address().port}/`,
             proxy: PROXY_URL,
             method: 'POST',
             headers,

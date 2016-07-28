@@ -10,8 +10,8 @@ module.exports = function createResponse(data) {
 
     const statusCode = data.statusCode; // Number
     const statusText = data.statusText; // String
-    const icapHeaders = data.icapHeaders; // Map
-    const payload = data.payload; // Map
+    const icapHeaders = data.icapHeaders || new Map(); // Map
+    const payload = data.payload || new Map(); // Map
 
     return Object.freeze({
         toBuffer
@@ -139,7 +139,7 @@ module.exports = function createResponse(data) {
 function getEncapsulatedData(payload) {
     const encapsulatedData = {
         headerValue : '',
-        payload: Buffer.from[0]
+        payload: Buffer.alloc(0)
     };
     let foundBody = false;
     ENCAPSULATED_HEADERS.forEach(tag => {

@@ -88,8 +88,9 @@ module.exports = function(socket) {
                         //     content: Buffer,
                         //     remainingIx: Number
                         // }
-                        events.emit('part-parsed');
                         parsed.encapsulated.set(key, parsedPart.content);
+                        events.emit(key);
+                        console.log('emit', key);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
                         console.log('thrown', e);
@@ -102,22 +103,31 @@ module.exports = function(socket) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
                 events.emit('end', parsed);
             }
-            if (isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_PREVIEW_TERMINATOR)) {
-                // Got preview according to preview header
-                // We can reply with 100 CONTINUE
-                if (canReceiveMore) {
-                    canReceiveMore = false;
+            if (isPreviewMode()) {
+                if (received.equals(BODY_PREVIEW_TERMINATOR)) {
+                    // Got preview according to preview header
+                    // We can reply with 100 CONTINUE
+                    if (canReceiveMore) {
+                        canReceiveMore = false;
+                    } else {
+                        canReceiveMore = true;
+                    }
+                    events.emit('end', parsed);
+                } else if (received.equals(BODY_ZERO_BYTE)) {
+                    events.emit('end', parsed);
                 } else {
-                    canReceiveMore = true;
+                    // We need more data
+                    console.log('more data (preview)');
+                    return;
                 }
-                events.emit('end', parsed);
-            }
-            if (isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_ZERO_BYTE)) {
-                // We can NOT reply with 100 CONT
-                events.emit('end', parsed);
-            }
-            if (!isPreviewMode(parsed.icapDetails.icapHeaders) && received.equals(BODY_PREVIEW_TERMINATOR)) {
-                events.emit('end', parsed);
+            } else {
+                if (received.equals(BODY_PREVIEW_TERMINATOR)) {
+                    events.emit('end', parsed);
+                } else {
+                    // We need more data
+                    console.log('more data (no preview)');
+                    return;
+                }
             }
         } else {
             events.emit('end', parsed);
@@ -136,24 +146,27 @@ module.exports = function(socket) {
         if (fullBodyPromise) {
             return fullBodyPromise;
         }
-        fullBodyPromise = new Promise(resolve => {
-            const data = getEncapsulatedSection(section);
-            if (canReceiveMore) {
-                events.on('end', getFullBodyEndHandler);
-                return getMore();
-            }
-            return resolve(data);
+        fullBodyPromise = Promise.resolve()
+            .then(() => new Promise(resolve => {
+                if (canReceiveMore) {
+                    events.on('end', onFullBodyRead);
+                    return getMore();
+                }
+                return resolve(waitForEncapsulatedSection(section));
 
-            function getFullBodyEndHandler() {
-                resolve(getEncapsulatedSection(section));
-            }
-        });
+                function onFullBodyRead() {
+                    events.removeListener('end', onFullBodyRead);
+                    resolve(getEncapsulatedSection(section));
+                }
+
+            }));
         return fullBodyPromise;
     }
 
     function getMore() {
         // TODO: set canReceiveMore to false
         // Maybe check that boolean in here, for sanity?
+        console.log('100 continue');
         socket.write('100 CONTINUE\r\n\r\n');
     }
     
@@ -173,11 +186,13 @@ module.exports = function(socket) {
             promises.push(getFullBody());
         }
         return Promise.all(promises)
-            .then(() => respond({
-                statusCode: 200,
-                statusText: 'OK',
-                payload: parsed.encapsulated
-            }));
+            .then(() => {
+                return respond({
+                    statusCode: 200,
+                    statusText: 'OK',
+                    payload: parsed.encapsulated
+                });
+            });
     }
     
     function badRequest() {
@@ -188,7 +203,10 @@ module.exports = function(socket) {
     }
 
     function respond(spec) {
-        socket.write(createResponse(spec).toBuffer());
+        const buffer = createResponse(spec).toBuffer();
+        socket.write(buffer);
+        console.log(buffer.toString());
+        finish();
     }
 
     function waitForEncapsulatedSection(section) {
@@ -201,7 +219,7 @@ module.exports = function(socket) {
         }
         return new Promise((resolve, reject) => {
             // TODO do not forget about socket-closed
-            events.on('socket-closed', handleSocketClose);
+            events.on('close', handleSocketClose);
             events.on(section, handleSection);
             function handleSection(data) {
                 cleanup();
@@ -216,7 +234,7 @@ module.exports = function(socket) {
                 reject(err);
             }
             function cleanup() {
-                events.removeListener('socket-closed', handleSocketClose);
+                events.removeListener('close', handleSocketClose);
                 events.removeListener(section, handleSection);
             }
         });
@@ -227,11 +245,16 @@ module.exports = function(socket) {
         return keys.find(type => isBody(type));
     }
 
-};
+    function finish() {
+        socket.removeListener('data', handleSocketData);
+        events.emit('finished');
+    }
 
-function isPreviewMode(icapHeaders) {
-    return icapHeaders.has('preview'); // && haveReadBodyPastPreview();
-}
+    function isPreviewMode() {
+        return parsed.icapDetails.icapHeaders.has('preview'); // && haveReadBodyPastPreview();
+    }
+
+};
 
 function parseEncapsulatedData(type, indexes, received) {
     if (isBody(type)) {

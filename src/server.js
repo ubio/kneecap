@@ -6,13 +6,13 @@ const EventEmitter = require('events').EventEmitter;
 const createIcapTransaction = require('./transaction.js');
 const createIcapRequest = require('./request.js');
 
-const DEFAULT_TRANSFER_SETTINGS = {
+const DEFAULT_TRANSFER = {
     complete: ['html', 'json'],
     ignore: [
         'bat', 'exe', 'com', 'bin', 'pkg', 'gz', 'zip', 'ogg',
         'asp', 'css', 'swf', 'mp3', 'wav', 'gif', 'jpg', 'jpeg'
     ],
-    PREVIEW: ['*']
+    preview: ['*']
 };
 
 const PREVIEW_BYTES = 10;
@@ -25,8 +25,9 @@ module.exports = function createServer(options) {
     const handlers = {};
 
     const server = {
-        listen,
         events,
+        listen,
+        close,
         requestHandler,
         responseHandler
     };
@@ -41,6 +42,10 @@ module.exports = function createServer(options) {
             _server.listen(...args.concat(resolve));
         });
     }
+    
+    function close() {
+        _server.close();
+    }
 
     function handleServerError(err) {
         events.emit('error', err);
@@ -50,17 +55,18 @@ module.exports = function createServer(options) {
         let currentTransaction = createIcapTransaction(socket);
         handleTransaction(currentTransaction);
 
-        currentTransaction.on('finished', finishedHandler);
+        currentTransaction.events.on('finished', finishedHandler);
 
         function finishedHandler() {
-            unhandleTransaction(currentTransaction);
+            console.log('Transacton finished');
             currentTransaction = createIcapTransaction(socket);
             handleTransaction(currentTransaction);
         }
     }
 
     function handleTransaction(transaction) {
-        transaction.on('icap-headers', icapDetails => {
+        transaction.events.on('icap-headers', icapDetails => {
+            console.log('=>', icapDetails);
             const handler = handlers[icapDetails.path];
             if (!handler) {
                 return transaction.badRequest();
@@ -114,26 +120,22 @@ module.exports = function createServer(options) {
         ];
         const transfer = handler.options.transfer;
         if (transfer.complete) {
-            headers.push('Transfer-Complete', transfer.complete);
+            headers.push(['Transfer-Complete', transfer.complete]);
         }
         if (transfer.ignore) {
-            headers.push('Transfer-Ignore', transfer.ignore);
+            headers.push(['Transfer-Ignore', transfer.ignore]);
         }
         if (transfer.preview) {
-            headers.push('Transfer-Preview', transfer.preview);
+            headers.push(['Transfer-Preview', transfer.preview]);
         }
         if (handler.options.previewBytes) {
-            headers.push('Preview', handler.options.previewBytes);
+            headers.push(['Preview', handler.options.previewBytes]);
         }
         transaction.respond({
             statusCode: 200,
             statusText: 'OK',
             icapHeaders: new Map(headers)
         });
-    }
-
-    function unhandleTransaction(transaction) {
-        
     }
 
     function requestHandler(path, options, fn) {
@@ -207,14 +209,15 @@ function sanitizeHeaders(headersString) {
 }
 
 function sanitizeOptions(options) {
-    options = options || {};
-    const transfer = options.transfer || DEFAULT_TRANSFER_SETTINGS;
+    const {
+        previewBytes = PREVIEW_BYTES,
+        transfer = DEFAULT_TRANSFER
+    } = (options || {});
     ['complete', 'ignore', 'preview'].forEach(key => {
         const value = transfer[key];
         if (Array.isArray(value)) {
             transfer[key] = value.join(', ');
-        }
-        if (typeof value !== 'string') {
+        } else if (typeof value !== 'string') {
             transfer[key] = '';
         }
     });
@@ -227,6 +230,6 @@ function sanitizeOptions(options) {
     }
     return {
         transfer,
-        previewBytes: options.previewBytes || PREVIEW_BYTES
+        previewBytes
     };
 }
