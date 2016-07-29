@@ -50,6 +50,7 @@ function parseIcapHeaders(lines) {
 
 function parseEncapsulatedRegions(str) {
     return (str || '').split(', ')
+        .filter(Boolean)
         .map(entry => {
             const [ section, startOffset ] = entry.split('=');
             return { section, startOffset };

@@ -3,7 +3,7 @@
 const net = require('net');
 const createSession = require('../src/session.js');
 
-describe('session', () => {
+describe.only('session', () => {
 
     let server = null;
     let client = null;
@@ -133,6 +133,7 @@ describe('session', () => {
                 session.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('k0=valueva');
+                        session.isContinueAllowed().should.equal(true);
                         done();
                     })
                     .catch(done);
@@ -145,6 +146,7 @@ describe('session', () => {
                 session.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('testkey=testvalue');
+                        session.isContinueAllowed().should.equal(false);
                         done();
                     })
                     .catch(done);
@@ -157,6 +159,7 @@ describe('session', () => {
                 session.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('testkey=testvalue');
+                        session.isContinueAllowed().should.equal(false);
                         done();
                     })
                     .catch(done);
@@ -167,7 +170,7 @@ describe('session', () => {
 
     describe('multiple requests', () => {
 
-        it.only('should handle multiple requests via one socket', done => {
+        it('should handle multiple requests via one socket', done => {
             const methods = [];
             client.write(getIcapOPTIONS());
             client.write(getIcapREQMOD());
@@ -177,7 +180,7 @@ describe('session', () => {
             setTimeout(() => {
                 methods.should.eql(['OPTIONS', 'REQMOD']);
                 done();
-            });
+            }, 100);
         });
 
     });

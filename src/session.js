@@ -31,25 +31,26 @@ module.exports = function createSession(socket) {
     return {
         events,
         hasEncapsulated,
-        waitForEncapsulated
+        waitForEncapsulated,
+        isContinueAllowed
     };
-    
-    function getDecodedMessage() {
-        return decoder.getDecodedMessage();
-    }
-    
-    function hasEncapsulated(section) {
-        return getDecodedMessage().icapDetails.encapsulatedRegions
-            .some(region => region.section === section);
+
+    function getIcapDetails() {
+        return decoder.getDecodedMessage().icapDetails;
     }
 
+    function hasEncapsulated(section) {
+        return getIcapDetails().encapsulatedRegions
+            .some(region => region.section === section);
+    }
+    
     function waitForEncapsulated(section) {
 
         if (!hasEncapsulated(section)) {
             return Promise.resolve(Buffer.alloc(0));
         }
 
-        const data = getDecodedMessage().encapsulated[section];
+        const data = getDecodedEncapsulated(section);
         if (data) {
             return Promise.resolve(data);
         }
@@ -60,7 +61,7 @@ module.exports = function createSession(socket) {
 
             function onSectionParsed() {
                 cleanup();
-                resolve(getDecodedMessage().encapsulated[section]);
+                resolve(getDecodedEncapsulated(section));
             }
 
             function onSocketClosed() {
@@ -74,6 +75,14 @@ module.exports = function createSession(socket) {
             }
 
         });
+    }
+
+    function getDecodedEncapsulated(section) {
+        return decoder.getDecodedMessage().encapsulated[section];
+    }
+    
+    function isContinueAllowed() {
+        return decoder.getDecodedMessage().allowContinue;
     }
     
 };

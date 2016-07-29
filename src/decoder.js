@@ -97,7 +97,7 @@ module.exports = function createDecoder(socket, events) {
         decoded = {
             icapDetails,
             encapsulated: {},
-            previewMode: !!icapDetails.headers['preview'],
+            previewMode: icapDetails.headers.has('preview'),
             allowContinue: false
         };
         encRegionIdx = 0;
@@ -110,8 +110,6 @@ module.exports = function createDecoder(socket, events) {
     function readEncapsulatedSection() {
         const region = decoded.icapDetails.encapsulatedRegions[encRegionIdx];
         if (!region) {
-            // NB: no region == no buffer!
-            assert(buffer.length === 0, 'Unexpected buffer on read end');
             return finishRead();
         }
 
@@ -189,5 +187,5 @@ module.exports = function createDecoder(socket, events) {
         // set a separate state.
         setState('new-request');
     }
-
+    
 };
