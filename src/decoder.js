@@ -58,7 +58,7 @@ module.exports = function createDecoder(socket, events) {
     function decode() {
         try {
             const returnValue = handleCurrentState();
-            if (!returnValue) {
+            if (returnValue === false) {
                 // need more data
                 return;
             }
@@ -142,15 +142,11 @@ module.exports = function createDecoder(socket, events) {
         if (buffer.equals(ICAP_BODY_DELIMITER)) {
             // only allow continue if we're in preview mode
             decoded.allowContinue = decoded.previewMode;
-            decoded.previewMode = false;
-            buffer = Buffer.alloc(0);
-            return finishRead();
+            return finish();
         }
         if (buffer.equals(ICAP_PREVIEW_EOF_DELIMITER)) {
-            decoded.previewMode = false;
             decoded.allowContinue = false;
-            buffer = Buffer.alloc(0);
-            return finishRead();
+            return finish();
         }
         const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
         if (chunkSeparatorIx === -1) {
@@ -169,6 +165,15 @@ module.exports = function createDecoder(socket, events) {
         appendBodyChunk(chunk);
         buffer = buffer.slice(chunkStartIx + chunk.length + CHUNK_SEPARATOR.length);
         setState('read-chunked-body');
+
+        function finish() {
+            const bodyType = decoded.icapDetails.bodyType;
+            decoded.previewMode = false;
+            buffer = Buffer.alloc(0);
+            debug(bodyType);
+            events.emit(bodyType);
+            return finishRead();
+        }
     }
 
     function appendBodyChunk(chunk) {
