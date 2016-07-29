@@ -6,6 +6,7 @@ const ICAP_BODY_DELIMITER = Buffer.from('0\r\n\r\n');
 
 const assert = require('assert');
 const EventEmitter = require('events').EventEmitter;
+const debug = require('debug')('icap:session');
 
 const parser = require('./parser');
 
@@ -14,6 +15,7 @@ const parser = require('./parser');
  * sending responses.
  */
 module.exports = function createSession(socket) {
+    debug('new session');
 
     /**
      * Events:
@@ -109,6 +111,7 @@ module.exports = function createSession(socket) {
     }
     
     function handleCurrentState() {
+        debug('decode: ' + state);
         switch (state) {
             case 'new-request':
                 return readIcapDetails();
@@ -143,7 +146,11 @@ module.exports = function createSession(socket) {
         if (!region) {
             // NB: no region == no buffer!
             assert(buffer.length === 0, 'Unexpected buffer on read end');
-            events.emit('end');
+            finishRead();
+            // By default we accept new request after all encapsulated regions
+            // are read. The exception is "100 Continue" which will
+            // set a separate state.
+            return 'new-request';
         }
         
         const nextRegion = parsed.icapDetails.encapsulatedRegions[encRegionIdx + 1];
@@ -161,17 +168,19 @@ module.exports = function createSession(socket) {
             return 'read-encapsulated';
         }
         // case 2: last region (-body) is chunked and ends with terminator
+        encRegionIdx += 1;
         return 'read-chunked-body';
     }
     
     function readChunkedBody() {
         assertParsed();
-        
-        // const region = parsed.icapDetails.encapsulatedRegions[encRegionIdx];
-        
-        encRegionIdx += 1;
-        
+
         throw new Error('Not implemented');
+    }
+
+    function finishRead() {
+        debug('finish read');
+        events.emit('end');
     }
     
 };

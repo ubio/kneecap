@@ -28,9 +28,9 @@ describe('session', () => {
         server = client = session = null;
     });
 
-    describe.only('parsing icap headers', () => {
+    describe('parsing icap headers', () => {
 
-        it('should parse requests without bodies', (done) => {
+        it.only('should parse requests without bodies', (done) => {
             client.write(getIcapOPTIONS());
             session.events.on('icap-request', icapDetails => {
                 icapDetails.method.should.equal('OPTIONS');
@@ -38,6 +38,22 @@ describe('session', () => {
                 icapDetails.version.should.equal('ICAP/1.0');
                 done();
             });
+        });
+
+        it('should parse requests when client sends fragments', (done) => {
+            session.events.on('icap-request', icapDetails => {
+                icapDetails.method.should.equal('OPTIONS');
+                icapDetails.headers.get('host').should.equal('127.0.0.1:8001');
+                icapDetails.version.should.equal('ICAP/1.0');
+                done();
+            });
+            const lines = getIcapOPTIONS().split('\r\n');
+            lines.reduce((flow, line) => {
+                return flow
+                    .then(() => client.write(line))
+                    .then(() => client.write('\r'))
+                    .then(() => client.write('\n'));
+            }, Promise.resolve());
         });
 
         it('should parse requests with bodies', (done) => {
@@ -51,8 +67,8 @@ describe('session', () => {
 
     describe('parsing encapsulated headers', () => {
         it('should parse headers without body', (done) => {
-            _client.write(getIcapREQMOD());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMOD());
+            session.events.on('end', parsed => {
                 const headers = parsed.encapsulated.get('req-hdr').toString();
                 headers.split('\r\n')[0].should.containEql('GET ');
                 done();
@@ -60,8 +76,8 @@ describe('session', () => {
         });
 
         it('should parse headers with preview body', (done) => {
-            _client.write(getIcapREQMODPreview());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODPreview());
+            session.events.on('end', parsed => {
                 const headers = parsed.encapsulated.get('req-hdr').toString();
                 headers.split('\r\n')[0].should.containEql('POST ');
                 done();
@@ -69,8 +85,8 @@ describe('session', () => {
         });
 
         it('should parse headers with full preview body', (done) => {
-            _client.write(getIcapREQMODPreviewFull());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODPreviewFull());
+            session.events.on('end', parsed => {
                 const headers = parsed.encapsulated.get('req-hdr').toString();
                 headers.split('\r\n')[0].should.containEql('POST ');
                 done();
@@ -78,8 +94,8 @@ describe('session', () => {
         });
 
         it('should parse headers with full body (no preview)', (done) => {
-            _client.write(getIcapREQMODFullBody());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODFullBody());
+            session.events.on('end', parsed => {
                 const headers = parsed.encapsulated.get('req-hdr').toString();
                 headers.split('\r\n')[0].should.containEql('POST ');
                 done();
@@ -89,8 +105,8 @@ describe('session', () => {
 
     describe('parsing encapsulated body', () => {
         it('should parse preview body', (done) => {
-            _client.write(getIcapREQMODPreview());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODPreview());
+            session.events.on('end', parsed => {
                 const body = parsed.encapsulated.get('req-body').toString();
                 body.should.equal('k0=valueva');
                 done();
@@ -98,8 +114,8 @@ describe('session', () => {
         });
 
         it('should parse full preview body', (done) => {
-            _client.write(getIcapREQMODPreviewFull());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODPreviewFull());
+            session.events.on('end', parsed => {
                 const body = parsed.encapsulated.get('req-body').toString();
                 body.should.equal('testkey=testvalue');
                 done();
@@ -107,8 +123,8 @@ describe('session', () => {
         });
 
         it('should parse full body (no preview)', (done) => {
-            _client.write(getIcapREQMODFullBody());
-            _connection.events.on('end', parsed => {
+            client.write(getIcapREQMODFullBody());
+            session.events.on('end', parsed => {
                 const body = parsed.encapsulated.get('req-body').toString();
                 body.should.equal('testkey=testvalue');
                 done();

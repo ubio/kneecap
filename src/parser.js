@@ -11,6 +11,7 @@ function parseIcapDetails(buffer) {
     const statusLine = parseIcapStatusLine(lines[0]);
     const headers = parseIcapHeaders(lines.slice(1));
     const encapsulatedRegions = parseEncapsulatedRegions(headers.get('encapsulated'));
+    const bodyType = getBodyType(encapsulatedRegions);
 
     return {
         method: statusLine.method,
@@ -18,7 +19,8 @@ function parseIcapDetails(buffer) {
         path: statusLine.path,
         version: statusLine.version,
         headers,
-        encapsulatedRegions
+        encapsulatedRegions,
+        bodyType
     };
 }
 
@@ -52,4 +54,9 @@ function parseEncapsulatedRegions(str) {
             const [ section, startOffset ] = entry.split('=');
             return { section, startOffset };
         });
+}
+
+function getBodyType(regions) {
+    const region = regions.find(region => region.section.indexOf('-body') > -1);
+    return region && region.section || 'null-body'; 
 }
