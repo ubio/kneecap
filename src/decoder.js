@@ -26,6 +26,7 @@ module.exports = function createDecoder(socket, events) {
     let state = 'new-request';
     let buffer = Buffer.alloc(0);
     let decoded = null;
+
     let encRegionIdx = 0;
 
     socket.on('data', onData);
@@ -92,13 +93,16 @@ module.exports = function createDecoder(socket, events) {
         if (idx === -1) {
             return false;
         }
+        const icapDetails = parser.parseIcapDetails(buffer.slice(0, idx));
         decoded = {
-            icapDetails: parser.parseIcapDetails(buffer.slice(0, idx)),
-            encapsulated: {}
+            icapDetails,
+            encapsulated: {},
+            previewMode: !!icapDetails.headers['preview'],
+            allowContinue: false
         };
         encRegionIdx = 0;
-        debug('new request', decoded.icapDetails.method, decoded.icapDetails.path);
-        events.emit('icap-request', decoded.icapDetails);
+        debug('new request', icapDetails.method, icapDetails.path);
+        events.emit('icap-request', icapDetails);
         buffer = buffer.slice(idx + ICAP_HEADERS_DELIMITER.length);
         setState('read-encapsulated');
     }
@@ -135,12 +139,16 @@ module.exports = function createDecoder(socket, events) {
     }
 
     function readChunkedBody() {
-        // TODO work here
         if (buffer.equals(ICAP_BODY_DELIMITER)) {
+            // only allow continue if we're in preview mode
+            decoded.allowContinue = decoded.previewMode;
+            decoded.previewMode = false;
             buffer = Buffer.alloc(0);
             return finishRead();
         }
         if (buffer.equals(ICAP_PREVIEW_EOF_DELIMITER)) {
+            decoded.previewMode = false;
+            decoded.allowContinue = false;
             buffer = Buffer.alloc(0);
             return finishRead();
         }
