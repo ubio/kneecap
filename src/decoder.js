@@ -93,7 +93,8 @@ module.exports = function createDecoder(socket, events) {
         if (idx === -1) {
             return false;
         }
-        const icapDetails = parser.parseIcapDetails(buffer.slice(0, idx));
+        const icapDetails = parser.parseIcapDetails(consume(idx));
+        consume(ICAP_HEADERS_DELIMITER.length);
         decoded = {
             icapDetails,
             encapsulated: {},
@@ -103,7 +104,6 @@ module.exports = function createDecoder(socket, events) {
         encRegionIdx = 0;
         debug('new request', icapDetails.method, icapDetails.path);
         events.emit('icap-request', icapDetails);
-        buffer = buffer.slice(idx + ICAP_HEADERS_DELIMITER.length);
         setState('read-encapsulated');
     }
 
@@ -121,8 +121,7 @@ module.exports = function createDecoder(socket, events) {
                 // Read more data
                 return false;
             }
-            decoded.encapsulated[region.section] = buffer.slice(0, length);
-            buffer = buffer.slice(length);
+            decoded.encapsulated[region.section] = consume(length);
             debug(region.section);
             events.emit(region.section);
             // Read next encapsulated part
@@ -137,37 +136,43 @@ module.exports = function createDecoder(socket, events) {
     }
 
     function readChunkedBody() {
-        if (buffer.equals(ICAP_BODY_DELIMITER)) {
+        if (isAt(ICAP_BODY_DELIMITER)) {
+            consume(ICAP_BODY_DELIMITER.length);
             // only allow continue if we're in preview mode
             decoded.allowContinue = decoded.previewMode;
             return finish();
         }
-        if (buffer.equals(ICAP_PREVIEW_EOF_DELIMITER)) {
+        if (isAt(ICAP_PREVIEW_EOF_DELIMITER)) {
+            consume(ICAP_PREVIEW_EOF_DELIMITER.length);
             decoded.allowContinue = false;
             return finish();
         }
+
+        // Extract chunk size
         const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
         if (chunkSeparatorIx === -1) {
             return false;
         }
-        const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
+        const chunkSize = parseInt(consume(chunkSeparatorIx).toString(), 16);
+        consume(CHUNK_SEPARATOR.length);
         if (chunkSize === 0) {
             // this should be a body terminator, demand more data!
             return false;
         }
-        const chunkStartIx = chunkSeparatorIx + CHUNK_SEPARATOR.length;
-        if (buffer.length < chunkStartIx + chunkSize) {
+
+        // Extract chunk itself
+        if (buffer.length < chunkSize) {
             return false;
         }
-        const chunk = buffer.slice(chunkStartIx, chunkStartIx + chunkSize);
-        appendBodyChunk(chunk);
-        buffer = buffer.slice(chunkStartIx + chunk.length + CHUNK_SEPARATOR.length);
+        appendBodyChunk(consume(chunkSize));
+        consume(CHUNK_SEPARATOR.length);
+
+        // Continue
         setState('read-chunked-body');
 
         function finish() {
-            const bodyType = decoded.icapDetails.bodyType;
             decoded.previewMode = false;
-            buffer = Buffer.alloc(0);
+            const bodyType = decoded.icapDetails.bodyType;
             debug(bodyType);
             events.emit(bodyType);
             return finishRead();
@@ -186,6 +191,18 @@ module.exports = function createDecoder(socket, events) {
         // are read. The exception is "100 Continue" which will
         // set a separate state.
         setState('new-request');
+    }
+
+    function consume(length) {
+        const result = buffer.slice(0, length);
+        assert(result.length === length,
+            'Insufficient data! Please fix decoder by checking that data is available.');
+        buffer = buffer.slice(length);
+        return result;
+    }
+
+    function isAt(prefix) {
+        return buffer.slice(0, prefix.length).equals(prefix);
     }
     
 };
