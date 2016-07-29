@@ -297,7 +297,7 @@ module.exports = function(socket) {
 
     function finish() {
         socket.removeListener('data', handleSocketData);
-        emit('finished');
+        events.emit('finished');
     }
 
     function isPreviewMode() {
