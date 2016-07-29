@@ -183,6 +183,28 @@ describe.only('session', () => {
             }, 100);
         });
 
+        it('should handle loads of them', done => {
+            const methods = [];
+            client.write(getIcapREQMOD());
+            client.write(getIcapREQMODFullBody());
+            client.write(getIcapREQMODPreview());
+            client.write(getIcapREQMODPreviewFull());
+            client.write(getIcapOPTIONS());
+            session.events.on('icap-request', icapDetails => {
+                methods.push(icapDetails.method);
+            });
+            setTimeout(() => {
+                methods.should.eql([
+                    'REQMOD',
+                    'REQMOD',
+                    'REQMOD',
+                    'REQMOD',
+                    'OPTIONS'
+                ]);
+                done();
+            }, 100);
+        });
+
     });
 
 });

@@ -113,22 +113,25 @@ module.exports = function createDecoder(socket, events) {
             return finishRead();
         }
 
+        debug(region.section);
         const nextRegion = decoded.icapDetails.encapsulatedRegions[encRegionIdx + 1];
         if (nextRegion) {
-            // case 1: region has explicit length (all -hdr should have this)
+            // case 1: region has explicit length (all -hdr, basically)
             const length = nextRegion.startOffset - region.startOffset;
             if (buffer.length < length) {
                 // Read more data
                 return false;
             }
             decoded.encapsulated[region.section] = consume(length);
-            debug(region.section);
             events.emit(region.section);
-            // Read next encapsulated part
+            // read next encapsulated part
             encRegionIdx += 1;
             setState('read-encapsulated');
+        } else if (region.section === 'null-body') {
+            // case 2: null body
+            return finishRead();
         } else {
-            // case 2: last region (-body) is chunked and ends with terminator
+            // case 3: last region (-body) is chunked and ends with terminator
             decoded.encapsulated[region.section] = Buffer.alloc(0);
             encRegionIdx += 1;
             setState('read-chunked-body');
