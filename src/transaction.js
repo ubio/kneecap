@@ -20,6 +20,7 @@ module.exports = function(socket) {
     let received = new Buffer(0);
     let fullBodyPromise = null;
     let canReceiveMore = false;
+    let receivingDone = false;
 
     const parsed = {
         icapDetails: undefined,
@@ -47,6 +48,12 @@ module.exports = function(socket) {
         }
     }
 
+    function emit(event, data) {
+        setImmediate(() => {
+            events.emit(event, data);
+        });
+    }
+
     function handleSocketData(data) {
         received = Buffer.concat([received, data]);
 
@@ -56,7 +63,7 @@ module.exports = function(socket) {
             }
             parsed.icapDetails = parseIcapHeaders(received);
             received = received.slice(parsed.icapDetails.payloadIx);
-            events.emit('icap-headers', parsed.icapDetails);
+            emit('icap-headers', parsed.icapDetails);
         }
 
         if (parsed.icapDetails.encapsulated) {
@@ -93,17 +100,30 @@ module.exports = function(socket) {
                         // }
                         const content = parsedPart.content;
                         parsed.encapsulated.set(key, content);
-                        events.emit(key, content);
+                        emit(key, content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
                         console.log('try/catch thrown', e, received.toString());
+                        return;
+                    }
+                } else if (isBody(key)) {
+                    // We have some body parsed already, but received more data
+                    let parsedPart;
+                    try {
+                        parsedPart = parseEncapsulatedData(key, value, received);
+                        const content = parsedPart.content;
+                        parsed.encapsulated.set(key, Buffer.concat([parsed.encapsulated.get(key), content]));
+                        emit(key, content);
+                        received = received.slice(parsedPart.remainingIx);
+                    } catch(e) {
+                        console.log('try/catch 222 thrown', e, received.toString());
                         return;
                     }
                 }
             }
             if (received.length === 0 && parsed.icapDetails.encapsulated.has('null-body')) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
-                events.emit('end', parsed);
+                doneReceiving();
                 return;
             }
             if (isPreviewMode()) {
@@ -115,28 +135,34 @@ module.exports = function(socket) {
                     } else {
                         canReceiveMore = true;
                     }
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else if (received.equals(BODY_ZERO_BYTE)) {
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else {
                     // We need more data
-                    console.log('more data (preview)', received);
+                    console.log('will wait for more data (preview)', received, received.toString());
                     return;
                 }
             } else {
                 // Not preview mode
                 events;
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else {
                     // We need more data
-                    console.log('more data (no preview)');
+                    console.log('will wait for more data (no preview)', received);
                     return;
                 }
             }
         } else {
-            events.emit('end', parsed);
+            doneReceiving();
         }
+    }
+
+    function doneReceiving() {
+        received = new Buffer(0);
+        receivingDone = true;
+        emit('end', parsed);
     }
 
     function getEncapsulatedSection(name) {
@@ -153,11 +179,25 @@ module.exports = function(socket) {
         }
         fullBodyPromise = Promise.resolve()
             .then(() => new Promise(resolve => {
-                if (canReceiveMore) {
-                    events.on('end', onFullBodyRead);
-                    return getMore();
+                if (receivingDone) {
+                    if (canReceiveMore) {
+                        events.on('end', onFullBodyRead);
+                        return getMore();
+                    }
+                    return resolve(parsed.encapsulated.get(section));
                 }
-                return resolve(waitForEncapsulatedSection(section));
+                return waitAndAskForMore();
+                // return resolve(waitForEncapsulatedSection(section));
+
+                function waitAndAskForMore() {
+                    events.on('end', () => {
+                        if (canReceiveMore) {
+                            events.on('end', onFullBodyRead);
+                            return getMore();
+                        }
+                        return resolve(getEncapsulatedSection(section));
+                    });
+                }
 
                 function onFullBodyRead() {
                     events.removeListener('end', onFullBodyRead);
@@ -171,8 +211,11 @@ module.exports = function(socket) {
     function getMore() {
         // TODO: set canReceiveMore to false
         // Maybe check that boolean in here, for sanity?
-        console.log('writing to socket 100 continue');
-        socket.write('100 CONTINUE\r\n\r\n');
+        receivingDone = false;
+        respond({
+            statusCode: 100,
+            statusText: 'Continue'
+        });
     }
 
     function dontChange() {
@@ -210,7 +253,10 @@ module.exports = function(socket) {
     function respond(spec) {
         const buffer = createResponse(spec).toBuffer();
         socket.write(buffer);
-        finish();
+
+        if (receivingDone) {
+            finish();
+        }
     }
 
     function waitForEncapsulatedSection(section) {
@@ -251,7 +297,7 @@ module.exports = function(socket) {
 
     function finish() {
         socket.removeListener('data', handleSocketData);
-        events.emit('finished');
+        emit('finished');
     }
 
     function isPreviewMode() {

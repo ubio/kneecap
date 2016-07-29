@@ -24,7 +24,7 @@ should;
 // const kneecap = require('../index.js');
 const kneecap = require('../src/server.js');
 
-describe('integration', () => {
+describe.only('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
@@ -144,7 +144,7 @@ describe('integration', () => {
             });
     });
 
-    it.only('should change request body values', () => {
+    it('should change request body values', () => {
         const myFormKey = 'testkey';
         const myFormValue = 'testvalue';
         const expectedBodyValue = 'changedtestvalue';
