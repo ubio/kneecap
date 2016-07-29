@@ -8,9 +8,12 @@ const noop = () => {};
 
 module.exports = function createHttpRequest(headers, body) {
     return new Promise((resolve) => {
-        const socket = getSocket();
-
         server.on('request', handleServerRequest);
+
+        const socket = getSocket();
+        server.emit('connection', socket);
+        socket.emit('data', headers);
+        socket.emit('data', body);
 
         function handleServerRequest(req/*, res*/) {
             if (req.socket === socket) {
@@ -18,10 +21,6 @@ module.exports = function createHttpRequest(headers, body) {
                 resolve(req);
             }
         }
-
-        server.emit('connection', socket);
-        socket.emit('data', headers);
-        socket.emit('data', body);
     });
 };
 
