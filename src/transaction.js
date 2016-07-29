@@ -50,7 +50,7 @@ module.exports = function(socket) {
     function handleSocketData(data) {
         received = Buffer.concat([received, data]);
 
-        if (!parsed.icapDetails) {
+        if (!parsed.icapDetails) {  // new-request
             if (!containsIcapHeaders(received)) {
                 return;
             }
