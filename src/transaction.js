@@ -68,6 +68,9 @@ module.exports = function(socket) {
             //     'res-body': new Buffer(17)
             // }
             for (const entry of parsed.icapDetails.encapsulated) {
+                if (received.length === 0) {
+                    break;
+                }
                 const key = entry[0];
                 if ('null-body' === key) {
                     break;
