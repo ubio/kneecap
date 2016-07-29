@@ -28,7 +28,7 @@ describe('session', () => {
         server = client = session = null;
     });
 
-    describe('new request', () => {
+    describe.only('new request', () => {
 
         it('should parse requests without bodies', done => {
             client.write(getIcapOPTIONS());
@@ -71,7 +71,7 @@ describe('session', () => {
 
     describe('encapsulated headers', () => {
 
-        it.only('should parse HTTP headers without body', done => {
+        it('should parse HTTP headers without body', done => {
             client.write(getIcapREQMOD());
             session.events.on('icap-request', () => {
                 session.waitForEncapsulated('req-hdr')
@@ -89,7 +89,7 @@ describe('session', () => {
             session.events.on('end', parsed => {
                 const headers = parsed.encapsulated.get('req-hdr').toString();
                 headers.split('\r\n')[0].should.containEql('POST ');
-                done();
+                setTimeout(done, 100);
             });
         });
 
