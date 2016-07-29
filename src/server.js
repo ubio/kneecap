@@ -55,10 +55,10 @@ module.exports = function createServer(options) {
         let currentTransaction = createIcapTransaction(socket);
         handleTransaction(currentTransaction);
 
-        currentTransaction.events.on('finished', finishedHandler);
-
+        currentTransaction.events.once('finished', finishedHandler);
         function finishedHandler() {
             currentTransaction = createIcapTransaction(socket);
+            currentTransaction.events.once('finished', finishedHandler);
             handleTransaction(currentTransaction);
         }
     }
