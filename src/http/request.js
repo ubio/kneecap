@@ -3,21 +3,22 @@
 const http = require('http');
 const EventEmitter = require('events').EventEmitter;
 
+const server = new http.Server();
 const noop = () => {};
 
 module.exports = function createHttpRequest(headers, body) {
-    const server = new http.Server();
-
     return new Promise((resolve) => {
-
-        server.on('request', (req/*, res*/) => {
-            resolve(req);
-        });
-
         const socket = getSocket();
-        socket._handle = {
-            readStart: noop
-        };
+
+        server.on('request', handleServerRequest);
+
+        function handleServerRequest(req/*, res*/) {
+            if (req.socket === socket) {
+                server.removeListener('request', handleServerRequest);
+                resolve(req);
+            }
+        }
+
         server.emit('connection', socket);
         socket.emit('data', headers);
         socket.emit('data', body);
