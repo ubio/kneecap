@@ -48,13 +48,8 @@ module.exports = function(socket) {
         }
     }
 
-    function emit(event, data) {
-        setImmediate(() => {
-            events.emit(event, data);
-        });
-    }
-
     function handleSocketData(data) {
+        const eventsToEmit = [];
         received = Buffer.concat([received, data]);
 
         if (!parsed.icapDetails) {
@@ -87,7 +82,7 @@ module.exports = function(socket) {
                     if (value.length === 2) {
                         if (received.length < value[1]) {
                             // Wait for more data
-                            return;
+                            return doneHandlingSocketData();
                             break;
                         }
                     }
@@ -104,7 +99,7 @@ module.exports = function(socket) {
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
                         // console.log('try/catch thrown', e);
-                        return;
+                        return doneHandlingSocketData();
                     }
                 } else if (isBody(key)) {
                     // We have some body parsed already, but received more data
@@ -117,14 +112,14 @@ module.exports = function(socket) {
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
                         // console.log('try/catch 222 thrown', e);
-                        return;
+                        return doneHandlingSocketData();
                     }
                 }
             }
             if (received.length === 0 && parsed.icapDetails.encapsulated.has('null-body')) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
                 doneReceiving();
-                return;
+                return doneHandlingSocketData();
             }
             if (isPreviewMode()) {
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
@@ -140,8 +135,8 @@ module.exports = function(socket) {
                     doneReceiving();
                 } else {
                     // We need more data
-                    console.log('will wait for more data (preview)', received, received.toString());
-                    return;
+                    // console.log('will wait for more data (preview)', receivingDone, received, received.toString());
+                    return doneHandlingSocketData();
                 }
             } else {
                 // Not preview mode
@@ -150,19 +145,30 @@ module.exports = function(socket) {
                     doneReceiving();
                 } else {
                     // We need more data
-                    console.log('will wait for more data (no preview)', received);
-                    return;
+                    // console.log('will wait for more data (no preview)', received);
+                    return doneHandlingSocketData();
                 }
             }
         } else {
             doneReceiving();
+        }
+        return doneHandlingSocketData();
+
+        function doneHandlingSocketData() {
+            eventsToEmit.forEach(pair => {
+                events.emit(pair[0], pair[1]);
+            });
+        }
+
+        function emit(event, data) {
+            eventsToEmit.push([event, data]);
         }
     }
 
     function doneReceiving() {
         received = new Buffer(0);
         receivingDone = true;
-        emit('end', parsed);
+        events.emit('end', parsed);
     }
 
     function getEncapsulatedSection(name) {
@@ -192,8 +198,9 @@ module.exports = function(socket) {
                 function waitAndAskForMore() {
                     events.on('end', () => {
                         if (canReceiveMore) {
+                            getMore();
                             events.on('end', onFullBodyRead);
-                            return getMore();
+                            return;
                         }
                         return resolve(getEncapsulatedSection(section));
                     });

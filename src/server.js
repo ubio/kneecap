@@ -79,36 +79,39 @@ module.exports = function createServer(options) {
             }
 
             const icapRequest = createIcapRequest(icapDetails, transaction);
-            return handler.fn(icapRequest)
-                .then(response => {
-                    if (!response) {
-                        return transaction.dontChange();
-                    }
-                    return Promise.all([
-                        sanitizeRequestHeaders(response.requestHeaders, icapRequest),
-                        sanitizeResponseHeaders(response.responseHeaders, icapRequest),
-                        sanitizeRequestBody(response.requestBody, icapRequest),
-                        sanitizeResponseBody(response.responseBody, icapRequest),
-                    ])
-                        .then(results => {
-                            const [
-                                requestHeaders,
-                                responseHeaders,
-                                requestBody,
-                                responseBody
-                            ] = results;
-                            transaction.respond({
-                                statusCode: 200,
-                                statusText: 'OK',
-                                payload: new Map([
-                                    ['req-hdr', requestHeaders],
-                                    ['res-hdr', responseHeaders],
-                                    ['req-body', requestBody],
-                                    ['res-body', responseBody]
-                                ])
-                            });
+            const promise = handler.fn(icapRequest);
+            if (!promise) {
+                return transaction.dontChange();
+            }
+            return promise.then(response => {
+                if (!response) {
+                    return transaction.dontChange();
+                }
+                return Promise.all([
+                    sanitizeRequestHeaders(response.requestHeaders, icapRequest),
+                    sanitizeResponseHeaders(response.responseHeaders, icapRequest),
+                    sanitizeRequestBody(response.requestBody, icapRequest),
+                    sanitizeResponseBody(response.responseBody, icapRequest),
+                ])
+                    .then(results => {
+                        const [
+                            requestHeaders,
+                            responseHeaders,
+                            requestBody,
+                            responseBody
+                        ] = results;
+                        transaction.respond({
+                            statusCode: 200,
+                            statusText: 'OK',
+                            payload: new Map([
+                                ['req-hdr', requestHeaders],
+                                ['res-hdr', responseHeaders],
+                                ['req-body', requestBody],
+                                ['res-body', responseBody]
+                            ])
                         });
-                })
+                    });
+            })
                 .catch(err => {
                     console.log('handler threw', err);
                     transaction.badRequest();

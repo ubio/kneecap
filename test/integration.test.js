@@ -180,7 +180,7 @@ describe.only('integration', () => {
                 .then(results => {
                     const [requestHeaders, requestBody] = results;
                     const contentLength = expectedBody.length;
-                    console.log('in test, body length', requestBody.length);
+                    requestBody;
                     return {
                         requestBody: Buffer.from(expectedBody),
                         requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
@@ -195,18 +195,13 @@ describe.only('integration', () => {
                 res.destroy();
                 req.body.replaced.should.equal('value');
             });
-
-        function getLargeObject() {
-            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(999)) && prev, {});
-        }
     });
 
     it('should correctly parse large request bodies', done => {
-        const form = getLargeObject();
+        const form = getLargeObject(99);
         icapServer.requestHandler('/request', function(request) {
-            request.getRawRequestBody()
+            return request.getRawRequestBody()
                 .then(body => {
-                    console.log('body is', body.toString());
                     Object.keys(qs.parse(body.toString())).length.should.equal(Object.keys(form).length);
                     done();
                 })
@@ -220,12 +215,12 @@ describe.only('integration', () => {
                 res.destroy();
                 req.body.replaced.should.equal('value');
             });
-
-        function getLargeObject() {
-            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(99)) && prev, {});
-        }
     });
 });
+
+function getLargeObject(length = 99) {
+    return Array.from({length}).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(length)) && prev, {});
+}
 
 function createIcapServer() {
     return Promise.resolve()
