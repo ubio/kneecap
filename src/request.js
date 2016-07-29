@@ -7,9 +7,9 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
         hasResponseHeaders,
         hasResponseBody,
         getRequestHeaders,
+        getResponseHeaders,
         getRawRequestHeaders,
         getRawRequestBody,
-        getResponseHeaders,
         getRawResponseHeaders,
         getRawResponseBody
     });

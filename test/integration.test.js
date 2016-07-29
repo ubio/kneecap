@@ -24,7 +24,7 @@ should;
 // const kneecap = require('../index.js');
 const kneecap = require('../src/server.js');
 
-describe.only('integration', () => {
+describe('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 
