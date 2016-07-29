@@ -103,7 +103,7 @@ module.exports = function(socket) {
                         emit(key, content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
-                        console.log('try/catch thrown', e, received.toString());
+                        // console.log('try/catch thrown', e);
                         return;
                     }
                 } else if (isBody(key)) {
@@ -116,7 +116,7 @@ module.exports = function(socket) {
                         emit(key, content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
-                        console.log('try/catch 222 thrown', e, received.toString());
+                        // console.log('try/catch 222 thrown', e);
                         return;
                     }
                 }
@@ -352,7 +352,7 @@ function dechunk(buffer) {
     if (remaining.length > 0 && !isTerminator(remaining)) {
         const remainingDechunked = dechunk(remaining);
         return {
-            chunk: Buffer.concat([chunk, remainingDechunked]),
+            chunk: Buffer.concat([chunk, remainingDechunked.chunk]),
             remaining: remainingDechunked.remaining
         };
     }

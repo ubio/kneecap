@@ -156,7 +156,6 @@ describe.only('integration', () => {
                     const [requestHeaders, requestBody] = results;
                     const diff = expectedBodyValue.length - myFormValue.length;
                     const oldContentLength = Number(requestHeaders.match(/content-length: (\d+)/i)[1]);
-                    console.log('in test body is', requestBody.toString());
                     return {
                         requestBody: Buffer.from(requestBody.toString().replace(myFormValue, expectedBodyValue)),
                         requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
@@ -177,12 +176,16 @@ describe.only('integration', () => {
         const form = getLargeObject();
         const expectedBody = 'replaced=value';
         icapServer.requestHandler('/request', function(request) {
-            const headers = request.getRequestHeaders();
-            const contentLength = expectedBody.length;
-            return {
-                reqBody: expectedBody,
-                reqHeaders: headers.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
-            };
+            return Promise.all([request.getRequestHeaders(), request.getRawRequestBody()])
+                .then(results => {
+                    const [requestHeaders, requestBody] = results;
+                    const contentLength = expectedBody.length;
+                    console.log('in test, body length', requestBody.length);
+                    return {
+                        requestBody: Buffer.from(expectedBody),
+                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
+                    };
+                });
         });
         makeRequest('POST', undefined, form);
         return Promise.resolve(waitForRequest)
@@ -201,9 +204,10 @@ describe.only('integration', () => {
     it('should correctly parse large request bodies', done => {
         const form = getLargeObject();
         icapServer.requestHandler('/request', function(request) {
-            request.getRequestBody()
+            request.getRawRequestBody()
                 .then(body => {
-                    Object.keys(qs.parse(body)).length.should.equal(Object.keys(form).length);
+                    console.log('body is', body.toString());
+                    Object.keys(qs.parse(body.toString())).length.should.equal(Object.keys(form).length);
                     done();
                 })
                 .catch(done);
