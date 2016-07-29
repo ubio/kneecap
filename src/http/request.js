@@ -3,6 +3,8 @@
 const http = require('http');
 const EventEmitter = require('events').EventEmitter;
 
+// const createHttpResponse = require('./response.js');
+
 const server = new http.Server();
 const noop = () => {};
 
@@ -18,6 +20,7 @@ module.exports = function createHttpRequest(headers, body) {
         function handleServerRequest(req/*, res*/) {
             if (req.socket === socket) {
                 server.removeListener('request', handleServerRequest);
+                // const res = createHttpResponse(req, socket);
                 resolve(req);
             }
         }
