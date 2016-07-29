@@ -3,10 +3,9 @@
 const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
 const ICAP_PORT = 8001; // Must be the same as icap_service in test/squid.conf
 
-const PROXY_HOST = 'localhost';
-// const PROXY_HOST = '192.168.99.100';
+// const PROXY_HOST = 'localhost';
+const PROXY_HOST = '192.168.99.100';
 
-// const PROXY_URL = `http://localhost:${PROXY_PORT}/`;
 const PROXY_URL = `http://${PROXY_HOST}:${PROXY_PORT}/`;
 
 const childProcess = require('child_process');
@@ -20,8 +19,6 @@ const urlencodedParser = bodyParser.urlencoded({
     extended: false
 });
 const should = require('should');
-should;
-// const kneecap = require('../index.js');
 const kneecap = require('../src/server.js');
 
 describe('integration', () => {
@@ -40,7 +37,7 @@ describe('integration', () => {
 
     function makeRequest(method, headers, form) {
         return request({
-            url: `http://localhost:${_server.address().port}/`,
+            url: `http://192.168.0.2:${_server.address().port}/`,
             proxy: PROXY_URL,
             method,
             headers,
@@ -54,11 +51,11 @@ describe('integration', () => {
         return createIcapServer()
             .then(server => {
                 icapServer = server;
-                return startProxy();
-            })
-            .then(proxyPid => {
-                _proxyPid = proxyPid;
+                // return startProxy();
             });
+            // .then(proxyPid => {
+            //     _proxyPid = proxyPid;
+            // });
     });
     beforeEach(() => {
         return getListeningHttpServer()
@@ -74,9 +71,9 @@ describe('integration', () => {
                 _server = null;
             });
     });
-    after(() => {
-        return stopProxy(_proxyPid);
-    });
+    // after(() => {
+        // return stopProxy(_proxyPid);
+    // });
 
     it('should forward requests untouched', () => {
         const myHeaderName = 'X-Change-Me';

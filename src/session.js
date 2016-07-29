@@ -36,7 +36,7 @@ module.exports = function createSession(socket) {
     let parsed = null;
     let encRegionIdx = 0;
 
-    socket.on('data', decode);
+    socket.on('data', onData);
     
     return {
         events,
@@ -70,9 +70,9 @@ module.exports = function createSession(socket) {
             socket.on('close', onSocketClosed);
             events.on(section, onSectionParsed);
 
-            function onSectionParsed(data) {
+            function onSectionParsed() {
                 cleanup();
-                resolve(data);
+                resolve(parsed.encapsulated[section]);
             }
 
             function onSocketClosed() {
@@ -88,8 +88,12 @@ module.exports = function createSession(socket) {
         });
     }
     
-    function decode(newData) {
-        buffer = Buffer.concat([buffer, newData]);
+    function onData(data) {
+        buffer = Buffer.concat([buffer, data]);
+        decode();
+    }
+
+    function decode() {
         try {
             const newState = handleCurrentState();
             if (!newState) {
@@ -102,16 +106,14 @@ module.exports = function createSession(socket) {
             buffer = Buffer.alloc(0);
             events.emit('error', e);
             socket.close();
-            return;
         }
         // Impl. note: decoders should fully consume buffer
         if (buffer.length) {
-            decode(newData);
+            decode();
         }
     }
     
     function handleCurrentState() {
-        debug('decode: ' + state);
         switch (state) {
             case 'new-request':
                 return readIcapDetails();
@@ -133,6 +135,7 @@ module.exports = function createSession(socket) {
             icapDetails: parser.parseIcapDetails(buffer.slice(0, idx)),
             encapsulated: {}
         };
+        debug('new request', parsed.icapDetails.method, parsed.icapDetails.path);
         events.emit('icap-request', parsed.icapDetails);
         buffer = buffer.slice(idx + ICAP_HEADERS_DELIMITER.length);
         encRegionIdx = 0;
@@ -152,7 +155,7 @@ module.exports = function createSession(socket) {
             // set a separate state.
             return 'new-request';
         }
-        
+
         const nextRegion = parsed.icapDetails.encapsulatedRegions[encRegionIdx + 1];
         if (nextRegion) {
             // case 1: region has explicit length (all -hdr should have this)
@@ -163,6 +166,8 @@ module.exports = function createSession(socket) {
             }
             parsed.encapsulated[region.section] = buffer.slice(0, length);
             buffer = buffer.slice(length);
+            debug(region.section);
+            events.emit(region.section);
             // Read next encapsulated part
             encRegionIdx += 1;
             return 'read-encapsulated';
@@ -174,7 +179,6 @@ module.exports = function createSession(socket) {
     
     function readChunkedBody() {
         assertParsed();
-
         throw new Error('Not implemented');
     }
 
@@ -182,7 +186,7 @@ module.exports = function createSession(socket) {
         debug('finish read');
         events.emit('end');
     }
-    
+
 };
 
 
