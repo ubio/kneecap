@@ -20,6 +20,7 @@ module.exports = function(socket) {
     let received = new Buffer(0);
     let fullBodyPromise = null;
     let canReceiveMore = false;
+    let receivingDone = false;
 
     const parsed = {
         icapDetails: undefined,
@@ -48,6 +49,7 @@ module.exports = function(socket) {
     }
 
     function handleSocketData(data) {
+        const eventsToEmit = [];
         received = Buffer.concat([received, data]);
 
         if (!parsed.icapDetails) {  // new-request
@@ -56,7 +58,7 @@ module.exports = function(socket) {
             }
             parsed.icapDetails = parseIcapHeaders(received);
             received = received.slice(parsed.icapDetails.payloadIx);
-            events.emit('icap-headers', parsed.icapDetails);
+            emit('icap-headers', parsed.icapDetails);
         }
 
         if (parsed.icapDetails.encapsulated) {
@@ -68,6 +70,9 @@ module.exports = function(socket) {
             //     'res-body': new Buffer(17)
             // }
             for (const entry of parsed.icapDetails.encapsulated) {
+                if (received.length === 0) {
+                    break;
+                }
                 const key = entry[0];
                 if ('null-body' === key) {
                     break;
@@ -77,7 +82,7 @@ module.exports = function(socket) {
                     if (value.length === 2) {
                         if (received.length < value[1]) {
                             // Wait for more data
-                            return;
+                            return doneHandlingSocketData();
                             break;
                         }
                     }
@@ -88,20 +93,33 @@ module.exports = function(socket) {
                         //     content: Buffer,
                         //     remainingIx: Number
                         // }
-                        parsed.encapsulated.set(key, parsedPart.content);
-                        events.emit(key);
-                        console.log('emit', key);
+                        const content = parsedPart.content;
+                        parsed.encapsulated.set(key, content);
+                        emit(key, content);
                         received = received.slice(parsedPart.remainingIx);
                     } catch(e) {
-                        console.log('thrown', e);
-                        return;
+                        // console.log('try/catch thrown', e);
+                        return doneHandlingSocketData();
+                    }
+                } else if (isBody(key)) {
+                    // We have some body parsed already, but received more data
+                    let parsedPart;
+                    try {
+                        parsedPart = parseEncapsulatedData(key, value, received);
+                        const content = parsedPart.content;
+                        parsed.encapsulated.set(key, Buffer.concat([parsed.encapsulated.get(key), content]));
+                        emit(key, content);
+                        received = received.slice(parsedPart.remainingIx);
+                    } catch(e) {
+                        // console.log('try/catch 222 thrown', e);
+                        return doneHandlingSocketData();
                     }
                 }
             }
-            // console.log('asdqq remaining received', received);
             if (received.length === 0 && parsed.icapDetails.encapsulated.has('null-body')) {
                 // When parsing headers, the terminator \r\n\r\n is part of headers (http standard)
-                events.emit('end', parsed);
+                doneReceiving();
+                return doneHandlingSocketData();
             }
             if (isPreviewMode()) {
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
@@ -112,26 +130,45 @@ module.exports = function(socket) {
                     } else {
                         canReceiveMore = true;
                     }
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else if (received.equals(BODY_ZERO_BYTE)) {
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else {
                     // We need more data
-                    console.log('more data (preview)');
-                    return;
+                    // console.log('will wait for more data (preview)', receivingDone, received, received.toString());
+                    return doneHandlingSocketData();
                 }
             } else {
+                // Not preview mode
+                events;
                 if (received.equals(BODY_PREVIEW_TERMINATOR)) {
-                    events.emit('end', parsed);
+                    doneReceiving();
                 } else {
                     // We need more data
-                    console.log('more data (no preview)');
-                    return;
+                    // console.log('will wait for more data (no preview)', received);
+                    return doneHandlingSocketData();
                 }
             }
         } else {
-            events.emit('end', parsed);
+            doneReceiving();
         }
+        return doneHandlingSocketData();
+
+        function doneHandlingSocketData() {
+            eventsToEmit.forEach(pair => {
+                events.emit(pair[0], pair[1]);
+            });
+        }
+
+        function emit(event, data) {
+            eventsToEmit.push([event, data]);
+        }
+    }
+
+    function doneReceiving() {
+        received = new Buffer(0);
+        receivingDone = true;
+        events.emit('end', parsed);
     }
 
     function getEncapsulatedSection(name) {
@@ -148,11 +185,26 @@ module.exports = function(socket) {
         }
         fullBodyPromise = Promise.resolve()
             .then(() => new Promise(resolve => {
-                if (canReceiveMore) {
-                    events.on('end', onFullBodyRead);
-                    return getMore();
+                if (receivingDone) {
+                    if (canReceiveMore) {
+                        events.on('end', onFullBodyRead);
+                        return getMore();
+                    }
+                    return resolve(parsed.encapsulated.get(section));
                 }
-                return resolve(waitForEncapsulatedSection(section));
+                return waitAndAskForMore();
+                // return resolve(waitForEncapsulatedSection(section));
+
+                function waitAndAskForMore() {
+                    events.on('end', () => {
+                        if (canReceiveMore) {
+                            getMore();
+                            events.on('end', onFullBodyRead);
+                            return;
+                        }
+                        return resolve(getEncapsulatedSection(section));
+                    });
+                }
 
                 function onFullBodyRead() {
                     events.removeListener('end', onFullBodyRead);
@@ -166,10 +218,13 @@ module.exports = function(socket) {
     function getMore() {
         // TODO: set canReceiveMore to false
         // Maybe check that boolean in here, for sanity?
-        console.log('100 continue');
-        socket.write('100 CONTINUE\r\n\r\n');
+        receivingDone = false;
+        respond({
+            statusCode: 100,
+            statusText: 'Continue'
+        });
     }
-    
+
     function dontChange() {
         const allow = parsed.icapDetails.icapHeaders.get('allow') || '';
         if (allow.includes('204')) {
@@ -194,7 +249,7 @@ module.exports = function(socket) {
                 });
             });
     }
-    
+
     function badRequest() {
         return respond({
             statusCode: 400,
@@ -205,8 +260,10 @@ module.exports = function(socket) {
     function respond(spec) {
         const buffer = createResponse(spec).toBuffer();
         socket.write(buffer);
-        console.log(buffer.toString());
-        finish();
+
+        if (receivingDone) {
+            finish();
+        }
     }
 
     function waitForEncapsulatedSection(section) {
@@ -276,6 +333,12 @@ function parseEncapsulatedBody(received) {
 }
 
 function dechunk(buffer) {
+    if (buffer.length === 0) {
+        return {
+            chunk: new Buffer(0),
+            remaining: buffer
+        };
+    }
     const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
     const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
     if (chunkSize === 0) {
@@ -296,7 +359,7 @@ function dechunk(buffer) {
     if (remaining.length > 0 && !isTerminator(remaining)) {
         const remainingDechunked = dechunk(remaining);
         return {
-            chunk: Buffer.concat([chunk, remainingDechunked]),
+            chunk: Buffer.concat([chunk, remainingDechunked.chunk]),
             remaining: remainingDechunked.remaining
         };
     }

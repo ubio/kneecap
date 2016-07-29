@@ -3,8 +3,8 @@
 const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
 const ICAP_PORT = 8001; // Must be the same as icap_service in test/squid.conf
 
-// const PROXY_HOST = 'localhost';
-const PROXY_HOST = '192.168.99.100';
+const PROXY_HOST = 'localhost';
+// const PROXY_HOST = '192.168.99.100';
 
 // const PROXY_URL = `http://localhost:${PROXY_PORT}/`;
 const PROXY_URL = `http://${PROXY_HOST}:${PROXY_PORT}/`;
@@ -21,7 +21,8 @@ const urlencodedParser = bodyParser.urlencoded({
 });
 const should = require('should');
 should;
-const kneecap = require('../index.js');
+// const kneecap = require('../index.js');
+const kneecap = require('../src/server.js');
 
 describe('integration', () => {
     let _server, _proxyPid, icapServer;
@@ -37,21 +38,15 @@ describe('integration', () => {
         });
     }
 
-    function rGET(headers) {
+    function makeRequest(method, headers, form) {
         return request({
-            url: `http://192.168.0.2:${_server.address().port}/`,
+            url: `http://localhost:${_server.address().port}/`,
             proxy: PROXY_URL,
-            headers
-        });
-    }
-
-    function rPOST(headers, form) {
-        return request({
-            url: `http://192.168.0.2:${_server.address().port}/`,
-            proxy: PROXY_URL,
-            method: 'POST',
+            method,
             headers,
             form
+        }, err => {
+            err && console.log('request error', err);
         });
     }
 
@@ -59,11 +54,11 @@ describe('integration', () => {
         return createIcapServer()
             .then(server => {
                 icapServer = server;
-                // return startProxy();
+                return startProxy();
+            })
+            .then(proxyPid => {
+                _proxyPid = proxyPid;
             });
-            // .then(proxyPid => {
-            //     _proxyPid = proxyPid;
-            // });
     });
     beforeEach(() => {
         return getListeningHttpServer()
@@ -74,23 +69,22 @@ describe('integration', () => {
     });
     afterEach(() => {
         waitForRequest = Promise.reject(new Error('waitForRequest not set'));
-        icapServer.removeRequestModifier();
         return closeHttpServer(_server)
             .then(() => {
                 _server = null;
             });
     });
-    // after(() => {
-    //     return stopProxy(_proxyPid);
-    // });
+    after(() => {
+        return stopProxy(_proxyPid);
+    });
 
     it('should forward requests untouched', () => {
         const myHeaderName = 'X-Change-Me';
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        icapServer.removeRequestModifier();
-        rGET(headers);
+        icapServer.requestHandler('/request', () => Promise.resolve());
+        makeRequest('GET', headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -106,13 +100,15 @@ describe('integration', () => {
         const myHeaderValue = 'my-test-header';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        icapServer.setRequestModifier(function(request) {
-            const reqHeaders = request.getRequestHeaders();
-            return {
-                reqHeaders: reqHeaders.replace(myHeaderName, `${myHeaderName}-Changed`)
-            };
+        icapServer.requestHandler('/request', function(request) {
+            return request.getRequestHeaders()
+                .then(headers => {
+                    return {
+                        requestHeaders: headers.replace(myHeaderName, `${myHeaderName}-Changed`)
+                    };
+                });
         });
-        rGET(headers);
+        makeRequest('GET', headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -129,13 +125,15 @@ describe('integration', () => {
         const expectedHeaderValue = 'my-changed-header-value';
         const headers = {};
         headers[myHeaderName] = myHeaderValue;
-        icapServer.setRequestModifier(function(request) {
-            const reqHeaders = request.getRequestHeaders();
-            return {
-                reqHeaders: reqHeaders.replace(myHeaderValue, expectedHeaderValue)
-            };
+        icapServer.requestHandler('/request', function(request) {
+            return request.getRequestHeaders()
+                .then(headers => {
+                    return {
+                        requestHeaders: headers.replace(myHeaderValue, expectedHeaderValue)
+                    };
+                });
         });
-        rGET(headers);
+        makeRequest('GET', headers);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -152,19 +150,19 @@ describe('integration', () => {
         const expectedBodyValue = 'changedtestvalue';
         const form = {};
         form[myFormKey] = myFormValue;
-        icapServer.setRequestModifier(function(request) {
-            return request.getRequestBody()
-                .then(reqBody => {
-                    const reqHeaders = request.getRequestHeaders();
+        icapServer.requestHandler('/request', function(request) {
+            return Promise.all([request.getRequestHeaders(), request.getRawRequestBody()])
+                .then(results => {
+                    const [requestHeaders, requestBody] = results;
                     const diff = expectedBodyValue.length - myFormValue.length;
-                    const oldContentLength = Number(reqHeaders.match(/content-length: (\d+)/i)[1]);
+                    const oldContentLength = Number(requestHeaders.match(/content-length: (\d+)/i)[1]);
                     return {
-                        reqBody: reqBody.replace(myFormValue, expectedBodyValue),
-                        reqHeaders: reqHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
+                        requestBody: Buffer.from(requestBody.toString().replace(myFormValue, expectedBodyValue)),
+                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
                     };
                 });
         });
-        rPOST(undefined, form);
+        makeRequest('POST', undefined, form);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -177,15 +175,19 @@ describe('integration', () => {
     it('should change large request body values', () => {
         const form = getLargeObject();
         const expectedBody = 'replaced=value';
-        icapServer.setRequestModifier(function(request) {
-            const headers = request.getRequestHeaders();
-            const contentLength = expectedBody.length;
-            return {
-                reqBody: expectedBody,
-                reqHeaders: headers.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
-            };
+        icapServer.requestHandler('/request', function(request) {
+            return Promise.all([request.getRequestHeaders(), request.getRawRequestBody()])
+                .then(results => {
+                    const [requestHeaders, requestBody] = results;
+                    const contentLength = expectedBody.length;
+                    requestBody;
+                    return {
+                        requestBody: Buffer.from(expectedBody),
+                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${contentLength}`)
+                    };
+                });
         });
-        rPOST(undefined, form);
+        makeRequest('POST', undefined, form);
         return Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -193,23 +195,19 @@ describe('integration', () => {
                 res.destroy();
                 req.body.replaced.should.equal('value');
             });
-
-        function getLargeObject() {
-            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(999)) && prev, {});
-        }
     });
 
     it('should correctly parse large request bodies', done => {
-        const form = getLargeObject();
-        icapServer.setRequestModifier(function(request) {
-            request.getRequestBody()
+        const form = getLargeObject(99);
+        icapServer.requestHandler('/request', function(request) {
+            return request.getRawRequestBody()
                 .then(body => {
-                    Object.keys(qs.parse(body)).length.should.equal(Object.keys(form).length);
+                    Object.keys(qs.parse(body.toString())).length.should.equal(Object.keys(form).length);
                     done();
                 })
                 .catch(done);
         });
-        rPOST(undefined, form);
+        makeRequest('POST', undefined, form);
         Promise.resolve(waitForRequest)
             .then(result => {
                 const req = result.req;
@@ -217,15 +215,21 @@ describe('integration', () => {
                 res.destroy();
                 req.body.replaced.should.equal('value');
             });
-
-        function getLargeObject() {
-            return Array.from(Array(99)).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(99)) && prev, {});
-        }
     });
 });
 
+function getLargeObject(length = 99) {
+    return Array.from({length}).reduce((prev, _, ix) => (prev['k' + ix] = 'value'.repeat(length)) && prev, {});
+}
+
 function createIcapServer() {
-    return Promise.resolve(kneecap(ICAP_PORT));
+    return Promise.resolve()
+        .then(() => {
+            const server = kneecap();
+            server.listen(ICAP_PORT);
+            return new Promise(resolve => setTimeout(() => resolve(server), 500));
+        });
+    // return Promise.resolve(kneecap(ICAP_PORT));
 }
 
 function getListeningHttpServer() {
@@ -251,10 +255,10 @@ function closeHttpServer(server) {
 }
 
 function startProxy() {
-    //const configPath = path.join(__dirname, 'squid.conf');
-    //const proc = childProcess.spawn('squid3', ['-N', '-f', configPath, '-a', PROXY_PORT]);
-    const proc = childProcess.spawn('docker',
-        ['run', '--net=host', '--name=roxi-squid', 'universalbasket/roxi-squid']);
+    const configPath = path.join(__dirname, 'squid.conf');
+    const proc = childProcess.spawn('squid3', ['-N', '-f', configPath, '-a', PROXY_PORT]);
+    // const proc = childProcess.spawn('docker',
+    //     ['run', '--net=host', '--name=roxi-squid', 'universalbasket/roxi-squid']);
     return Promise.resolve(proc)
         .then(proc => {
             return waitForPortListening(PROXY_PORT)
