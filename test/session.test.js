@@ -22,10 +22,16 @@ describe.only('session', () => {
         });
     });
 
-    afterEach(() => {
+    afterEach(done => {
+        client.on('close', done);
         client.destroy();
-        server.close();
-        server = client = session = null;
+        client = null;
+        session = null;
+    });
+
+    afterEach(done => {
+        server.close(done);
+        server = null;
     });
 
     describe('new request', () => {
