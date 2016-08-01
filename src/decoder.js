@@ -113,7 +113,6 @@ module.exports = function createDecoder(socket, events) {
             return finishRead();
         }
 
-        debug(region.section);
         const nextRegion = decoded.icapDetails.encapsulatedRegions[encRegionIdx + 1];
         if (nextRegion) {
             // case 1: region has explicit length (all -hdr, basically)
@@ -123,6 +122,7 @@ module.exports = function createDecoder(socket, events) {
                 return false;
             }
             decoded.encapsulated[region.section] = consume(length);
+            debug(region.section);
             events.emit(region.section);
             // read next encapsulated part
             encRegionIdx += 1;
@@ -190,12 +190,12 @@ module.exports = function createDecoder(socket, events) {
     }
 
     function finishRead() {
-        debug('finish read');
-        events.emit('end');
         // By default we accept new request after all encapsulated regions
         // are read. The exception is "100 Continue" which will
         // set a separate state.
         setState('new-request');
+        debug('finish read');
+        events.emit('end');
     }
 
     function consume(length) {

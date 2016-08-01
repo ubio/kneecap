@@ -1,13 +1,13 @@
 'use strict';
 
 const net = require('net');
-const createSession = require('../src/session.js');
+const createConnection = require('../src/connection.js');
 
-describe.only('session', () => {
+describe('connection', () => {
 
     let server = null;
     let client = null;
-    let session = null;
+    let connection = null;
 
     beforeEach(done => {
         server = net.createServer();
@@ -16,7 +16,7 @@ describe.only('session', () => {
                 port: server.address().port
             });
             server.on('connection', socket => {
-                session = createSession(socket);
+                connection = createConnection(socket);
                 done();
             });
         });
@@ -26,7 +26,7 @@ describe.only('session', () => {
         client.on('close', done);
         client.destroy();
         client = null;
-        session = null;
+        connection = null;
     });
 
     afterEach(done => {
@@ -38,7 +38,7 @@ describe.only('session', () => {
 
         it('should parse requests without bodies', done => {
             client.write(getIcapOPTIONS());
-            session.events.on('icap-request', icapDetails => {
+            connection.events.on('icap-request', icapDetails => {
                 icapDetails.method.should.equal('OPTIONS');
                 icapDetails.headers.get('host').should.equal('127.0.0.1:8001');
                 icapDetails.version.should.equal('ICAP/1.0');
@@ -48,7 +48,7 @@ describe.only('session', () => {
 
         it('should parse requests when client sends fragments', done => {
             client.setNoDelay(true);
-            session.events.on('icap-request', icapDetails => {
+            connection.events.on('icap-request', icapDetails => {
                 icapDetails.method.should.equal('OPTIONS');
                 icapDetails.headers.get('host').should.equal('127.0.0.1:8001');
                 icapDetails.version.should.equal('ICAP/1.0');
@@ -67,7 +67,7 @@ describe.only('session', () => {
 
         it('should parse requests with encapsulated headers', done => {
             client.write(getIcapREQMOD());
-            session.events.on('icap-request', icapDetails => {
+            connection.events.on('icap-request', icapDetails => {
                 icapDetails.headers.size.should.equal(5);
                 done();
             });
@@ -79,8 +79,8 @@ describe.only('session', () => {
 
         it('should parse HTTP headers without body', done => {
             client.write(getIcapREQMOD());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-hdr')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
                         const lines = buffer.toString().split('\r\n');
                         lines[0].should.containEql('GET');
@@ -92,8 +92,8 @@ describe.only('session', () => {
 
         it('should parse headers with preview body', done => {
             client.write(getIcapREQMODPreview());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-hdr')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
                         const lines = buffer.toString().split('\r\n');
                         lines[0].should.containEql('POST ');
@@ -105,8 +105,8 @@ describe.only('session', () => {
 
         it('should parse headers with full preview body', done => {
             client.write(getIcapREQMODPreviewFull());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-hdr')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
                         const lines = buffer.toString().split('\r\n');
                         lines[0].should.containEql('POST ');
@@ -118,8 +118,8 @@ describe.only('session', () => {
 
         it('should parse headers with full body (no preview)', done => {
             client.write(getIcapREQMODFullBody());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-hdr')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
                         const lines = buffer.toString().split('\r\n');
                         lines[0].should.containEql('POST ');
@@ -135,11 +135,11 @@ describe.only('session', () => {
 
         it('should parse preview body', done => {
             client.write(getIcapREQMODPreview());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-body')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('k0=valueva');
-                        session.isContinueAllowed().should.equal(true);
+                        connection.isContinueAllowed().should.equal(true);
                         done();
                     })
                     .catch(done);
@@ -148,11 +148,11 @@ describe.only('session', () => {
 
         it('should parse full preview body', done => {
             client.write(getIcapREQMODPreviewFull());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-body')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('testkey=testvalue');
-                        session.isContinueAllowed().should.equal(false);
+                        connection.isContinueAllowed().should.equal(false);
                         done();
                     })
                     .catch(done);
@@ -161,11 +161,11 @@ describe.only('session', () => {
 
         it('should parse full body (no preview)', done => {
             client.write(getIcapREQMODFullBody());
-            session.events.on('icap-request', () => {
-                session.waitForEncapsulated('req-body')
+            connection.events.on('icap-request', () => {
+                connection.waitForEncapsulated('req-body')
                     .then(buffer => {
                         buffer.toString().should.equal('testkey=testvalue');
-                        session.isContinueAllowed().should.equal(false);
+                        connection.isContinueAllowed().should.equal(false);
                         done();
                     })
                     .catch(done);
@@ -180,7 +180,7 @@ describe.only('session', () => {
             const methods = [];
             client.write(getIcapOPTIONS());
             client.write(getIcapREQMOD());
-            session.events.on('icap-request', icapDetails => {
+            connection.events.on('icap-request', icapDetails => {
                 methods.push(icapDetails.method);
             });
             setTimeout(() => {
@@ -196,7 +196,7 @@ describe.only('session', () => {
             client.write(getIcapREQMODPreview());
             client.write(getIcapREQMODPreviewFull());
             client.write(getIcapOPTIONS());
-            session.events.on('icap-request', icapDetails => {
+            connection.events.on('icap-request', icapDetails => {
                 methods.push(icapDetails.method);
             });
             setTimeout(() => {

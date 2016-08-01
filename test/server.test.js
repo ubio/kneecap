@@ -95,7 +95,7 @@ describe('ICAP server', () => {
                 makeRequest('GET', headers);
             });
 
-            it('should not transform request bodies', done => {
+            it.only('should not transform request bodies', done => {
                 const obj = createLargeObject(300);
                 events.once('request', req => {
                     Object.keys(obj).forEach(key => {

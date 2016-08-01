@@ -148,7 +148,7 @@ describe('integration', () => {
         const form = {};
         form[myFormKey] = myFormValue;
         icapServer.requestHandler('/request', function(request) {
-            return Promise.all([request.getRequestHeaders(), request.getRawRequestBody()])
+            return Promise.all([request.getRequestHeaders(), request.getRawBody()])
                 .then(results => {
                     const [requestHeaders, requestBody] = results;
                     const diff = expectedBodyValue.length - myFormValue.length;
@@ -173,7 +173,7 @@ describe('integration', () => {
         const form = getLargeObject();
         const expectedBody = 'replaced=value';
         icapServer.requestHandler('/request', function(request) {
-            return Promise.all([request.getRequestHeaders(), request.getRawRequestBody()])
+            return Promise.all([request.getRequestHeaders(), request.getRawBody()])
                 .then(results => {
                     const [requestHeaders, requestBody] = results;
                     const contentLength = expectedBody.length;
@@ -197,7 +197,7 @@ describe('integration', () => {
     it('should correctly parse large request bodies', done => {
         const form = getLargeObject(99);
         icapServer.requestHandler('/request', function(request) {
-            return request.getRawRequestBody()
+            return request.getRawBody()
                 .then(body => {
                     Object.keys(qs.parse(body.toString())).length.should.equal(Object.keys(form).length);
                     done();

@@ -1,33 +1,28 @@
 'use strict';
 
-module.exports = function createIcapRequest(icapDetails, transaction) {
+module.exports = function createIcapRequest(icapDetails, connection) {
     return Object.freeze({
         hasRequestHeaders,
-        hasRequestBody,
         hasResponseHeaders,
-        hasResponseBody,
+        hasBody,
         getRequestHeaders,
         getResponseHeaders,
         getRawRequestHeaders,
-        getRawRequestBody,
         getRawResponseHeaders,
-        getRawResponseBody
+        getRawBody
     });
 
     function hasRequestHeaders() {
-        return transaction.hasEncapsulatedSection('req-hdr');
-    }
-
-    function hasRequestBody() {
-        return transaction.hasEncapsulatedSection('req-body');
+        return connection.hasEncapsulated('req-hdr');
     }
 
     function hasResponseHeaders() {
-        return transaction.hasEncapsulatedSection('res-hdr');
+        return connection.hasEncapsulated('res-hdr');
     }
 
-    function hasResponseBody() {
-        return transaction.hasEncapsulatedSection('res-body');
+    function hasBody() {
+        return connection.hasEncapsulated('req-body') ||
+            connection.hasEncapsulated('res-body');
     }
 
     function getRequestHeaders() {
@@ -52,22 +47,11 @@ module.exports = function createIcapRequest(icapDetails, transaction) {
     }
 
     function getRawHeaders(section) {
-        return transaction.waitForEncapsulatedSection(section);
+        return connection.waitForEncapsulated(section);
     }
 
-    function getRawRequestBody() {
-        return getRawBody('req-body');
-    }
-
-    function getRawResponseBody() {
-        return getRawBody('res-body');
-    }
-
-    function getRawBody(section) {
-        if (!icapDetails.encapsulated.has(section)) {
-            return Promise.resolve('');
-        }
-        return transaction.getFullBody();
+    function getRawBody() {
+        return connection.getFullBody();
     }
 
 };

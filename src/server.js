@@ -3,7 +3,7 @@
 const net = require('net');
 const EventEmitter = require('events').EventEmitter;
 
-const createIcapTransaction = require('./transaction.js');
+const createIcapConnection = require('./connection.js');
 const createIcapRequest = require('./request.js');
 
 const DEFAULT_TRANSFER = {
@@ -52,46 +52,36 @@ module.exports = function createServer(options) {
     }
 
     function handleConnection(socket) {
-        let currentTransaction = createIcapTransaction(socket);
-        handleTransaction(currentTransaction);
-
-        currentTransaction.events.once('finished', finishedHandler);
-        function finishedHandler() {
-            currentTransaction = createIcapTransaction(socket);
-            currentTransaction.events.once('finished', finishedHandler);
-            handleTransaction(currentTransaction);
-        }
-    }
-
-    function handleTransaction(transaction) {
-        transaction.events.on('icap-headers', icapDetails => {
+        const connection = createIcapConnection(socket);
+        
+        connection.events.on('icap-request', icapDetails => {
             const handler = handlers[icapDetails.path];
             if (!handler) {
-                return transaction.badRequest();
+                return connection.badRequest();
             }
 
             if (icapDetails.method === 'OPTIONS') {
-                return handleOptions(transaction, handler);
+                return handleOptions(connection, handler);
             }
 
             if (handler.method !== icapDetails.method) {
-                return transaction.badRequest();
+                return connection.badRequest();
             }
 
-            const icapRequest = createIcapRequest(icapDetails, transaction);
+            const icapRequest = createIcapRequest(icapDetails, connection);
             const promise = handler.fn(icapRequest);
             if (!promise) {
-                return transaction.dontChange();
+                return connection.dontChange();
             }
             return promise.then(response => {
                 if (!response) {
-                    return transaction.dontChange();
+                    return connection.dontChange();
                 }
                 return Promise.all([
                     sanitizeRequestHeaders(response.requestHeaders, icapRequest),
                     sanitizeResponseHeaders(response.responseHeaders, icapRequest),
-                    sanitizeRequestBody(response.requestBody, icapRequest),
-                    sanitizeResponseBody(response.responseBody, icapRequest),
+                    sanitizeBody(response.requestBody, icapRequest),
+                    sanitizeBody(response.responseBody, icapRequest),
                 ])
                     .then(results => {
                         const [
@@ -100,7 +90,7 @@ module.exports = function createServer(options) {
                             requestBody,
                             responseBody
                         ] = results;
-                        transaction.respond({
+                        connection.respond({
                             statusCode: 200,
                             statusText: 'OK',
                             payload: new Map([
@@ -114,12 +104,12 @@ module.exports = function createServer(options) {
             })
                 .catch(err => {
                     console.log('handler threw', err);
-                    transaction.badRequest();
+                    connection.badRequest();
                 });
         });
     }
 
-    function handleOptions(transaction, handler) {
+    function handleOptions(connection, handler) {
         const headers = [
             ['Methods', handler.method]
         ];
@@ -136,10 +126,10 @@ module.exports = function createServer(options) {
         if (handler.options.previewBytes) {
             headers.push(['Preview', handler.options.previewBytes]);
         }
-        transaction.respond({
+        connection.respond({
             statusCode: 200,
             statusText: 'OK',
-            icapHeaders: new Map(headers)
+            headers: new Map(headers)
         });
     }
 
@@ -189,22 +179,12 @@ function sanitizeResponseHeaders(headers, icapRequest) {
     return sanitizeHeaders(headers);
 }
 
-function sanitizeRequestBody(body, icapRequest) {
+function sanitizeBody(body, icapRequest) {
     if (!body) {
-        if (!icapRequest.hasRequestBody()) {
+        if (!icapRequest.hasBody()) {
             return;
         }
-        return icapRequest.getRawRequestBody();
-    }
-    return body;
-}
-
-function sanitizeResponseBody(body, icapRequest) {
-    if (!body) {
-        if (!icapRequest.hasResponseBody()) {
-            return;
-        }
-        return icapRequest.getRawResponseBody();
+        return icapRequest.getRawBody();
     }
     return body;
 }

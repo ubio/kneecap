@@ -1,19 +1,23 @@
 'use strict';
 
+const debug = require('debug')('icap:response');
+
 const ENCAPSULATED_HEADERS = ['req-hdr', 'res-hdr'];
 const ENCAPSULATED_BODIES = ['opt-body', 'req-body', 'res-body'];
 // const ENCAPSULATED_TAGS = ENCAPSULATED_HEADERS.concat(ENCAPSULATED_BODIES);
 const CHUNK_SEPARATOR = Buffer.from('\r\n');
 const PAYLOAD_SEPARATOR = Buffer.from('\r\n\r\n');
 
-const mandatoryIcapHeaders = [['ISTag', 'kneecap-itag'], ['Date', new Date().toGMTString()]];
+const mandatoryHeaders = [['ISTag', 'kneecap-itag'], ['Date', new Date().toGMTString()]];
 
 module.exports = function createResponse(data) {
 
     const statusCode = data.statusCode; // Number
     const statusText = data.statusText; // String
-    const icapHeaders = data.icapHeaders || new Map(); // Map
+    const headers = data.headers || new Map(); // Map
     const payload = data.payload || new Map(); // Map
+
+    debug(statusCode, statusText);
 
     return Object.freeze({
         toBuffer
@@ -32,12 +36,12 @@ module.exports = function createResponse(data) {
         const line1 = `ICAP/1.0 ${statusCode} ${statusText}`;
         lines.push(line1);
 
-        mandatoryIcapHeaders.forEach(element => {
-            if (!icapHeaders.has(element[0])) {
-                icapHeaders.set(element[0], element[1]);
+        mandatoryHeaders.forEach(element => {
+            if (!headers.has(element[0])) {
+                headers.set(element[0], element[1]);
             }
         });
-        icapHeaders.forEach((value, key) => {
+        headers.forEach((value, key) => {
             const line = `${key}: ${value}`;
             lines.push(line);
         });
