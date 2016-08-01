@@ -156,19 +156,21 @@ module.exports = function createDecoder(socket, events) {
         if (chunkSeparatorIx === -1) {
             return false;
         }
-        const chunkSize = parseInt(consume(chunkSeparatorIx).toString(), 16);
-        consume(CHUNK_SEPARATOR.length);
+        const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
         if (chunkSize === 0) {
             // this should be a body terminator, demand more data!
             return false;
         }
 
         // Extract chunk itself
-        if (buffer.length < chunkSize) {
+        const remaining = buffer.slice(chunkSeparatorIx + CHUNK_SEPARATOR.length);
+        if (remaining.length < chunkSize) {
             return false;
         }
-        appendBodyChunk(consume(chunkSize));
-        consume(CHUNK_SEPARATOR.length);
+        appendBodyChunk(remaining.slice(0, chunkSize));
+
+        // Now we can finally shrink our buffer
+        consume(chunkSeparatorIx + CHUNK_SEPARATOR.length + chunkSize + CHUNK_SEPARATOR.length);
 
         // Continue
         setState('read-chunked-body');
