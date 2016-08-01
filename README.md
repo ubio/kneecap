@@ -148,7 +148,9 @@ kc.requestHandler('/request', {
 
 ### responseHandler
 
-Adds a RESPMOD handler. Same usage as [`requestHandler`](#requestHandler).
+Adds a RESPMOD handler. Same usage as [`requestHandler`](#requesthandler).
+
+-----
 
 ## Request
 
@@ -197,3 +199,31 @@ Returns a promise which resolves to the request/response body as a buffer (depen
 ### getRequest
 
 Returns a promise which resolves to an [`http.ClientRequest`](https://nodejs.org/api/http.html#http_class_http_clientrequest).
+
+-----
+
+## Respond
+
+To respond to an icap [`Request`](#request), the request handler must return a promise which resolves to either:
+
+- falsey value (`undefined`, `null`, `false`), which will not modify the request, forwarding it as is. If `Allow: 204` is sent by the icap client, then `204 No Content` will be returned. Otherwise, the request data will be sent back unchanged.
+```js
+kc.requestHandler('/request', function(request) {
+    return null;
+});
+```
+
+- object containing any combination of `requestHeaders:String`, `requestBody:Buffer`, `responseHeaders:String`, `responseBody:Buffer`. You must only include one body in the response.
+
+```js
+kc.requestHandler('/request', function(request) {
+    return Promise.all([request.getRequestHeaders(), request.getRawBody()])
+        .then(results => {
+            const [requestHeaders, requestBody] = results;
+            return {
+                requestBody: Buffer.from('foo=bar'),
+                requestHeaders: requestHeaders
+            };
+        });
+});
+```
