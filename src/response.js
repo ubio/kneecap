@@ -1,23 +1,29 @@
 'use strict';
 
+const debug = require('debug')('icap:response');
+
 const ENCAPSULATED_HEADERS = ['req-hdr', 'res-hdr'];
 const ENCAPSULATED_BODIES = ['opt-body', 'req-body', 'res-body'];
 // const ENCAPSULATED_TAGS = ENCAPSULATED_HEADERS.concat(ENCAPSULATED_BODIES);
-const PAYLOAD_SEPARATOR = '\r\n\r\n';
 const CHUNK_SEPARATOR = Buffer.from('\r\n');
+const PAYLOAD_SEPARATOR = Buffer.from('\r\n\r\n');
 
-module.exports = function responseConstructor(data) {
+const mandatoryHeaders = [['ISTag', 'kneecap-itag'], ['Date', new Date().toGMTString()]];
+
+module.exports = function createResponse(data) {
 
     const statusCode = data.statusCode; // Number
     const statusText = data.statusText; // String
-    const icapHeaders = data.icapHeaders; // Map
-    const payload = data.payload; // Map
+    const headers = data.headers || new Map(); // Map
+    const payload = data.payload || new Map(); // Map
+
+    debug(statusCode, statusText);
 
     return Object.freeze({
-        toString
+        toBuffer
     });
 
-    function toString() {
+    function toBuffer() {
         const lines = [];
 
         /**
@@ -30,7 +36,12 @@ module.exports = function responseConstructor(data) {
         const line1 = `ICAP/1.0 ${statusCode} ${statusText}`;
         lines.push(line1);
 
-        icapHeaders.forEach((value, key) => {
+        mandatoryHeaders.forEach(element => {
+            if (!headers.has(element[0])) {
+                headers.set(element[0], element[1]);
+            }
+        });
+        headers.forEach((value, key) => {
             const line = `${key}: ${value}`;
             lines.push(line);
         });
@@ -121,36 +132,37 @@ module.exports = function responseConstructor(data) {
          */
         const encapsulatedData = getEncapsulatedData(payload);
         const encapsulatedHeaderValue = encapsulatedData.headerValue;
-        const encapsulatedPayload = encapsulatedData.payload;
         const encapsulatedLine = `Encapsulated: ${encapsulatedHeaderValue}`;
         lines.push(encapsulatedLine);
 
-        if (encapsulatedPayload.length > 0) {
-            const response = `${lines.join('\r\n')}\r\n\r\n${encapsulatedPayload}\r\n\r\n`;
-            return response;
-        }
-        const response = `${lines.join('\r\n')}\r\n\r\n`;
-        return response;
+        const encapsulatedPayload = encapsulatedData.payload.length ?
+            Buffer.concat([encapsulatedData.payload, PAYLOAD_SEPARATOR]) :
+            Buffer.alloc(0);
 
-        lines.push('');
-        return lines.join('\r\n');
+        return Buffer.concat([
+            Buffer.from(lines.join('\r\n')),
+            PAYLOAD_SEPARATOR,
+            encapsulatedPayload
+        ]);
     }
 };
 
 function getEncapsulatedData(payload) {
     const encapsulatedData = {
         headerValue : '',
-        payload : '',
+        payload: Buffer.alloc(0)
     };
     let foundBody = false;
     ENCAPSULATED_HEADERS.forEach(tag => {
-        if (payload.has(tag)) {
-            addEncapsulatedHeaderPayload(encapsulatedData, tag, payload.get(tag));
+        const content = payload.get(tag);
+        if (content) {
+            addEncapsulatedHeaderPayload(encapsulatedData, tag, content);
         }
     });
     ENCAPSULATED_BODIES.forEach(tag => {
-        if (payload.has(tag)) {
-            addEncapsulatedBodyPayload(encapsulatedData, tag, payload.get(tag));
+        const content = payload.get(tag);
+        if (content) {
+            addEncapsulatedBodyPayload(encapsulatedData, tag, content);
             foundBody = true;
         }
     });
@@ -162,7 +174,10 @@ function getEncapsulatedData(payload) {
 
 function addEncapsulatedHeaderPayload(encapsulatedData, tag, data) {
     const ix = encapsulatedData.payload.length;
-    encapsulatedData.payload  = `${encapsulatedData.payload}${PAYLOAD_SEPARATOR}${data.trim()}`.trim();
+    encapsulatedData.payload = Buffer.concat([
+        encapsulatedData.payload,
+        data
+    ]);
     if (encapsulatedData.headerValue.length > 0) {
         encapsulatedData.headerValue += ', ';
     }
@@ -171,7 +186,10 @@ function addEncapsulatedHeaderPayload(encapsulatedData, tag, data) {
 
 function addEncapsulatedBodyPayload(encapsulatedData, tag, data) {
     const ix = encapsulatedData.payload.length;
-    encapsulatedData.payload = `${encapsulatedData.payload}${PAYLOAD_SEPARATOR}${getAsChunk(data)}`;
+    encapsulatedData.payload = Buffer.concat([
+        encapsulatedData.payload,
+        getAsChunk(data)
+    ]);
     if (encapsulatedData.headerValue.length > 0) {
         encapsulatedData.headerValue += ', ';
     }
@@ -180,5 +198,11 @@ function addEncapsulatedBodyPayload(encapsulatedData, tag, data) {
 
 function getAsChunk(data) {
     const hexLength = data.length.toString(16);
-    return `${hexLength}${CHUNK_SEPARATOR}${data}${CHUNK_SEPARATOR}0`;
+    return Buffer.concat([
+        Buffer.from(hexLength),
+        CHUNK_SEPARATOR,
+        data,
+        CHUNK_SEPARATOR,
+        Buffer.from('0')
+    ]);
 }

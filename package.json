@@ -1,27 +1,28 @@
 {
-    "name": "kneecap",
-    "version": "0.0.1",
-    "description": "",
-    "main": "index.js",
-    "scripts": {
-        "test": "mocha --timeout 5000 test/*.test.js"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git@github.com:universalbasket/kneecap.git"
-    },
-    "keywords": [
-        "icap"
-    ],
-    "license": "UB",
-    "bugs": {
-        "url": "https://github.com/universalbasket/kneecap/issues"
-    },
-    "homepage": "https://github.com/universalbasket/kneecap",
-    "devDependencies": {
-        "mocha": "2.5.x",
-        "should": "10.0.x",
-        "request": "2.73.x",
-        "body-parser": "1.15.x"
-    }
+  "name": "kneecap",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha --timeout 5000 test/*.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:universalbasket/kneecap.git"
+  },
+  "keywords": [
+    "icap"
+  ],
+  "license": "UB",
+  "bugs": {
+    "url": "https://github.com/universalbasket/kneecap/issues"
+  },
+  "homepage": "https://github.com/universalbasket/kneecap",
+  "devDependencies": {
+    "body-parser": "1.15.x",
+    "eslint": "^3.1.1",
+    "mocha": "2.5.x",
+    "request": "2.73.x",
+    "should": "10.0.x"
+  }
 }
