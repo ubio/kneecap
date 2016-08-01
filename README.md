@@ -149,3 +149,51 @@ kc.requestHandler('/request', {
 ### responseHandler
 
 Adds a RESPMOD handler. Same usage as [`requestHandler`](#requestHandler).
+
+## Request
+
+`IcapRequest` passed to `requestHandler` and `responseHandler` methods.
+
+### hasRequestHeaders
+
+Synchronous, returns a boolean whether the icap request has request headers.
+
+### getRequestHeaders
+
+Returns a promise which resolves to the request headers as a String, most likely separated by `\r\n`.
+
+### getRawRequestHeaders
+
+Returns a promise which resolves to the request headers as a Buffer.
+
+### hasResponseHeaders
+
+Synchronous, returns a boolean whether the icap request has response headers.
+
+### getResponseHeaders
+
+Returns a promise which resolves to the response headers as a String, most likely separated by `\r\n`.
+
+### getRawResponseHeaders
+
+Returns a promise which resolves to the response headers as a Buffer.
+
+### hasBody
+
+Synchronous, returns a boolean whether the icap request has a request or response body (depends on REQMOD/RESPMOD handler type).
+
+### hasPreview
+
+Returns a promise which resolves to a boolean whether the request has a body preview.
+
+### getPreview
+
+Returns a promise which resolves to the request/response body preview as a buffer (depends on REQMOD/RESPMOD handler type). The promise may be resolved synchronously, so call `Promise.resolve(request.getPreview())` as a best practice.
+
+### getRawBody
+
+Returns a promise which resolves to the request/response body as a buffer (depends on REQMOD/RESPMOD handler type).
+
+### getRequest
+
+Returns a promise which resolves to an [`http.ClientRequest`](https://nodejs.org/api/http.html#http_class_http_clientrequest).
