@@ -1,12 +1,16 @@
 'use strict';
 
+const createHttpRequest = require('./http/request.js');
+
 module.exports = function createIcapRequest(icapDetails, connection) {
+
     return Object.freeze({
         hasRequestHeaders,
         hasResponseHeaders,
         hasBody,
         getRequestHeaders,
         getResponseHeaders,
+        getRequest,
         getRawRequestHeaders,
         getRawResponseHeaders,
         getRawBody
@@ -54,6 +58,16 @@ module.exports = function createIcapRequest(icapDetails, connection) {
         return connection.getFullBody();
     }
 
+    function getRequest() {
+        return Promise.all([
+            getRawRequestHeaders(),
+            getRawBody()
+        ])
+            .then(results => {
+                const [headers, body] = results;
+                return createHttpRequest(headers, body);
+            });
+    }
 };
 
 function parseHeaders(buffer) {
