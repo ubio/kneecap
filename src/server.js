@@ -44,7 +44,9 @@ module.exports = function createServer(options) {
     }
 
     function close() {
-        _server.close();
+        return new Promise(resolve => {
+            _server.close(resolve);
+        });
     }
 
     function handleServerError(err) {

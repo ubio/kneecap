@@ -10,6 +10,11 @@ npm test
 
 A KC instance only allows separate endpoints per http request/response. A single callback can be attached to each endpoint, which must return a promise.
 
+## Gotchas
+
+- You should make sure `headers['content-length']` is valid (or removed) when changing the request's (or response's) body, otherwise the data may end up truncated.
+- Getting the preview is a lot faster than getting the full body. Use `request.getPreivew()` where possible.
+
 ## Examples
 
 ### Change request headers
@@ -73,7 +78,74 @@ A KC instance only allows separate endpoints per http request/response. A single
         });
 ```
 
-## Gotchas
+# API
 
-- You should make sure `headers['content-length']` is valid (or removed) when changing the request's (or response's) body, otherwise the data may end up truncated.
-- Getting the preview is a lot faster than getting the full body. Use `request.getPreivew()` where possible.
+## Server instance
+
+### listen
+
+Accepts the same params as node.js's `net` [`server.listen`](https://nodejs.org/api/net.html#net_server_listen_handle_backlog_callback), except for the final callback.
+
+Returns a promise which resolves when listening.
+
+```js
+const kneecap = require('kneecap');
+
+const kc = kneecap();
+kc.listen(8008)
+    .then(() => {
+        console.log('listening');
+    });
+```
+
+### close
+
+Stops the server from accepting new connections. Resolves when remaining connections have been closed.
+
+```js
+kc.close()
+    .then(() => {
+        console.log('icap server closed');
+    });
+```
+
+### events
+
+Events are emitted on this emitter.
+
+```js
+kc.events.on('error', err => {
+    console.log('icap server error', err);
+});
+```
+
+### requestHandler
+
+Adds a REQMOD handler.
+
+> `server.requestHandler(path[, options], callback)`
+
+The `path` must be a string where icap REQMOD requests will be listened to.
+
+The `options` object, when included, will specify the OPTIONS response for the `path` endpoint. Supported options:
+
+- `transfer` object, which must contain at least one child with the all `['*']` setting
+    - `complete` array, will be sent as `Transfer-Complete`, i.e. `['html', 'js']`
+    - `ignore` array, will be sent as `Transfer-Ignore`, i.e. `['jpg', 'jpeg', 'swf', 'mp4']`
+    - `preview` array, will be sent as `Transfer-Preview`, i.e. `['*']`
+- `previewBytes` integer, how long should the preview be (where available), in bytes.
+
+```js
+kc.requestHandler('/request', {
+    previewBytes: 128,
+    transfer: {
+        complete: ['html', 'js'],
+        ignore: ['jpg', 'ogg', 'mp4', 'gif', 'gifv'],
+        preview: ['*'],
+    }
+}, handleRequest);
+```
+
+### responseHandler
+
+Adds a RESPMOD handler. Same usage as [`requestHandler`](#requestHandler).
