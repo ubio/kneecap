@@ -8,9 +8,7 @@ npm test
 
 # How it works
 
-A KC instance allows a single endpoint per http request/response, hardcoded `/request` or `/response`.
-
-A single callback can be attached to each endpoint, which must return a promise.
+A KC instance only allows separate endpoints per http request/response. A single callback can be attached to each endpoint, which must return a promise.
 
 ## Examples
 
@@ -44,3 +42,38 @@ A single callback can be attached to each endpoint, which must return a promise.
         });
 ```
 
+### Don't change anything
+
+```js
+        icapServer.requestHandler('/request', function(request) {
+            return Promise.all([request.getRequestHeaders(), request.getRawBody()])
+                .then(results => {
+                    const [requestHeaders, requestBody] = results;
+                    console.log('Got request', requestHeaders, requestBody);
+                    return;
+                });
+        });
+```
+
+### Set request options
+
+```js
+        icapServer.requestHandler('/request', {
+            previewBytes: 128,
+            transfer: {
+                complete: ['html', 'js'],
+                ignore: ['jpg', 'ogg', 'mp4', 'gif', 'gifv'],
+                preview: ['*'],
+            }
+        }, function(request) {
+            return Promise.resolve(request.getPreview())
+                .then(previewBody => {
+                    console.log('preview', previewBody.toString());
+                });
+        });
+```
+
+## Gotchas
+
+- You should make sure `headers['content-length']` is valid (or removed) when changing the request's (or response's) body, otherwise the data may end up truncated.
+- Getting the preview is a lot faster than getting the full body. Use `request.getPreivew()` where possible.

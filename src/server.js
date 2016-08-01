@@ -53,7 +53,7 @@ module.exports = function createServer(options) {
 
     function handleConnection(socket) {
         const connection = createIcapConnection(socket);
-        
+
         connection.events.on('icap-request', icapDetails => {
             const handler = handlers[icapDetails.path];
             if (!handler) {

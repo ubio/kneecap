@@ -79,6 +79,29 @@ describe.only('integration', () => {
         return stopProxy(_proxyPid);
     });
 
+    it('should support preview body', done => {
+        const form = getLargeObject(99);
+        const previewBytes = 128;
+        icapServer.requestHandler('/request', {
+            previewBytes
+        }, function(request) {
+            return request.getPreview()
+                .then(body => {
+                    body.length.should.equal(previewBytes);
+                    done();
+                })
+                .catch(done);
+        });
+        makeRequest('POST', undefined, form);
+        Promise.resolve(waitForRequest)
+            .then(result => {
+                const req = result.req;
+                const res = result.res;
+                res.destroy();
+                req.body.replaced.should.equal('value');
+            });
+    });
+
     it('should forward requests untouched', () => {
         const myHeaderName = 'X-Change-Me';
         const myHeaderValue = 'my-test-header';

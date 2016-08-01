@@ -8,11 +8,13 @@ module.exports = function createIcapRequest(icapDetails, connection) {
         hasRequestHeaders,
         hasResponseHeaders,
         hasBody,
+        hasPreview,
         getRequestHeaders,
         getResponseHeaders,
         getRequest,
         getRawRequestHeaders,
         getRawResponseHeaders,
+        getPreview,
         getRawBody
     });
 
@@ -27,6 +29,14 @@ module.exports = function createIcapRequest(icapDetails, connection) {
     function hasBody() {
         return connection.hasEncapsulated('req-body') ||
             connection.hasEncapsulated('res-body');
+    }
+
+    function hasPreview() {
+        return connection.hasPreview();
+    }
+
+    function getPreview() {
+        return connection.getPreview();
     }
 
     function getRequestHeaders() {

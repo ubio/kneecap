@@ -103,8 +103,8 @@ module.exports = function createDecoder(socket, events) {
         };
         encRegionIdx = 0;
         debug('new request', icapDetails.method, icapDetails.path);
-        events.emit('icap-request', icapDetails);
         setState('read-encapsulated');
+        events.emit('icap-request', icapDetails);
     }
 
     function readEncapsulatedSection() {

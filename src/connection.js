@@ -31,6 +31,8 @@ module.exports = function createConnection(socket) {
     return {
         events,
         hasEncapsulated,
+        hasPreview,
+        getPreview,
         waitForEncapsulated,
         isContinueAllowed,
         getFullBody,
@@ -42,6 +44,21 @@ module.exports = function createConnection(socket) {
     function hasEncapsulated(section) {
         return getIcapDetails().encapsulatedRegions
             .some(region => region.section === section);
+    }
+
+    function hasPreview() {
+        return getIcapDetails().headers.has('preview');
+    }
+
+    function getPreview() {
+        const bodyType = getIcapDetails().bodyType;
+        if (bodyType === 'null-body') {
+            return Promise.resolve();
+        }
+        if (isReadFinished()) {
+            return Promise.resolve(getDecodedEncapsulated(bodyType));
+        }
+        return waitForEncapsulated(bodyType);
     }
 
     function waitForEncapsulated(section) {
@@ -168,6 +185,14 @@ module.exports = function createConnection(socket) {
         return decoder.getDecodedMessage().allowContinue;
     }
 
+    /**
+     * Based on the decoder's state, signifies whether there is more
+     * incoming data or not.
+     *
+     * This will return true if one of:
+     * - waiting for a new request (previous session done)
+     * - preview done (but haven't sent `100 Continue` or replied)
+     */
     function isReadFinished() {
         return decoder.getState() === 'new-request';
     }
