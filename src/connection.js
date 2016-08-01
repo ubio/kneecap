@@ -15,17 +15,17 @@ module.exports = function createConnection(socket) {
 
     /**
      * Events:
-     * 
+     *
      * * error — unrecoverable error (socket will be closed)
      * * icap-request — ICAP request headers are read and parsed
      * * end — socket read operation is finished, emitted in three conditions:
-     * 
+     *
      *         1) no preview and all encapsulated body is parsed
      *         2) preview + encapsulated preview is parsed
      *         3) preview + 100 continue sent + rest of body is parsed
      */
     const events = new EventEmitter();
-    
+
     const decoder = createDecoder(socket, events);
 
     return {
@@ -80,7 +80,7 @@ module.exports = function createConnection(socket) {
     function getDecodedEncapsulated(section) {
         return decoder.getDecodedMessage().encapsulated[section];
     }
-    
+
     function getFullBody() {
         const bodyType = getIcapDetails().bodyType;
         if (bodyType === 'null-body') {

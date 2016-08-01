@@ -12,29 +12,35 @@ A KC instance allows a single endpoint per http request/response, hardcoded `/re
 
 A single callback can be attached to each endpoint, which must return a promise.
 
+## Examples
+
+### Change request headers
+
 ```js
-require('kneecap')(ICAP_PORT)
-    .then(server => {
-        server.setRequestModifier(request => {
-            const headers = request.getRequestHeaders(); // sync
-            if (!headers.includes('x-my-header')) {
-                return;
-            }
-            return request.getRequestBody() // async, promisified
-                .then(body => {
+        icapServer.requestHandler('/request', function(request) {
+            return request.getRequestHeaders()
+                .then(headers => {
                     return {
-                        reqHeader: headers.replace(/content-length: \d+/i, 'content-length: 999'),
-                        reqBody: body.replace(/foo/, 'barbaz')
+                        requestHeaders: headers.replace(myHeaderName, `${myHeaderName}-Changed`)
                     };
                 });
         });
-    });
 ```
 
-## Requests manipulation
+### Change request body
 
-- listen to requests on `/request` endpoint
+```js
+        icapServer.requestHandler('/request', function(request) {
+            return Promise.all([request.getRequestHeaders(), request.getRawBody()])
+                .then(results => {
+                    const [requestHeaders, requestBody] = results;
+                    const diff = expectedBodyValue.length - myFormValue.length;
+                    const oldContentLength = Number(requestHeaders.match(/content-length: (\d+)/i)[1]);
+                    return {
+                        requestBody: Buffer.from(requestBody.toString().replace(myFormValue, expectedBodyValue)),
+                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
+                    };
+                });
+        });
+```
 
-## Response manipulation
-
-// TODO
