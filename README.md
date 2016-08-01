@@ -227,3 +227,7 @@ kc.requestHandler('/request', function(request) {
         });
 });
 ```
+
+# License
+
+[Apache 2.0](https://github.com/universalbasket/kneecap/blob/master/LICENSE)
