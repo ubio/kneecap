@@ -2,7 +2,7 @@
   "name": "kneecap",
   "version": "0.0.1",
   "description": "",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
     "test": "mocha --timeout 5000 test/*.test.js"
   },
