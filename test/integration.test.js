@@ -80,7 +80,7 @@ describe('integration', () => {
     });
 
     it('should support preview body', done => {
-        const form = getLargeObject(99);
+        const form = getLargeObject(200);
         const previewBytes = 128;
         icapServer.requestHandler('/request', {
             previewBytes

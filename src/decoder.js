@@ -45,21 +45,12 @@ module.exports = function createDecoder(socket, events) {
         return decoded;
     }
 
-    function appendBodyChunk(chunk) {
-        const bodyBuffer = decoded.encapsulated[decoded.icapDetails.bodyType];
-        decoded.encapsulated[decoded.icapDetails.bodyType] = Buffer.concat([bodyBuffer, chunk]);
-    }
-
-    function finishRead() {
-        debug('finish read');
-        events.emit('end');
-    }
-
     function acceptNewRequest() {
         decoder.use(handleNewRequest);
     }
 
     function acceptBody() {
+        delete decoded.encapsulated[decoded.icapDetails.bodyType];
         decoder.use(handleChunkedBody);
     }
 
@@ -73,7 +64,8 @@ module.exports = function createDecoder(socket, events) {
             icapDetails,
             encapsulated: {},
             previewMode: icapDetails.headers.has('preview'),
-            allowContinue: false
+            allowContinue: false,
+            bodyBuffer: Buffer.alloc(0)
         };
         debug('new request', icapDetails.method, icapDetails.path);
         events.emit('icap-request', icapDetails);
@@ -87,15 +79,12 @@ module.exports = function createDecoder(socket, events) {
             if (nextRegion) {
                 // case 1: region has explicit length (all -hdr, basically)
                 const length = nextRegion.startOffset - region.startOffset;
-                decoded.encapsulated[region.section] = yield length;
-                debug(region.section);
-                events.emit(region.section);
+                sectionParseDone(region.section, yield length);
             } else if (region.section === 'null-body') {
                 // case 2: null body
                 return finishRead();
             } else {
                 // case 3: last region (-body) is chunked and ends with terminator
-                decoded.encapsulated[region.section] = Buffer.alloc(0);
                 yield* handleChunkedBody();
             }
         }
@@ -126,9 +115,25 @@ module.exports = function createDecoder(socket, events) {
         yield NEWLINE;
         decoded.previewMode = false;
         const bodyType = decoded.icapDetails.bodyType;
-        debug(bodyType);
-        events.emit(bodyType);
+        sectionParseDone(bodyType, decoded.bodyBuffer);
         finishRead();
+    }
+
+    // Utilities
+
+    function sectionParseDone(section, buffer) {
+        decoded.encapsulated[section] = buffer;
+        debug(section);
+        events.emit(section, buffer);
+    }
+
+    function appendBodyChunk(chunk) {
+        decoded.bodyBuffer = Buffer.concat([decoded.bodyBuffer, chunk]);
+    }
+
+    function finishRead() {
+        debug('finish read');
+        events.emit('end');
     }
 
 };
