@@ -99,7 +99,7 @@ module.exports = function createServer(options) {
                 if (bodyFromUser) {
                     body = sanitizeBody(bodyFromUser);
                 } else if (responseType === requestType) {
-                    body = icapRequest.getRawBody();
+                    body = sanitizeBody(icapRequest.getRawBody());
                 }
                 return Promise.all([
                     sanitizeRequestHeaders(response.requestHeaders, icapRequest),
@@ -231,13 +231,7 @@ function sanitizeResponseHeaders(headers, icapRequest) {
     return sanitizeHeaders(headers);
 }
 
-function sanitizeBody(body, icapRequest) {
-    if (!body) {
-        if (!icapRequest.hasBody()) {
-            return;
-        }
-        return icapRequest.getRawBody();
-    }
+function sanitizeBody(body) {
     return body;
 }
 
