@@ -8,7 +8,7 @@ const ENCAPSULATED_BODIES = ['opt-body', 'req-body', 'res-body'];
 const CHUNK_SEPARATOR = Buffer.from('\r\n');
 const PAYLOAD_SEPARATOR = Buffer.from('\r\n\r\n');
 
-const mandatoryHeaders = [['ISTag', 'kneecap-itag'], ['Date', new Date().toGMTString()]];
+const HEADER_ISTAG = `"kneecap-itag-${Math.random()}"`;
 
 module.exports = function createResponse(data) {
 
@@ -36,7 +36,7 @@ module.exports = function createResponse(data) {
         const line1 = `ICAP/1.0 ${statusCode} ${statusText}`;
         lines.push(line1);
 
-        mandatoryHeaders.forEach(element => {
+        getMandatoryHeaders().forEach(element => {
             if (!headers.has(element[0])) {
                 headers.set(element[0], element[1]);
             }
@@ -205,4 +205,10 @@ function getAsChunk(data) {
         CHUNK_SEPARATOR,
         Buffer.from('0')
     ]);
+}
+
+function getMandatoryHeaders() {
+    const isTag = ['ISTag', HEADER_ISTAG];
+    const date = ['Date', new Date().toGMTString()];
+    return [isTag, date];
 }
