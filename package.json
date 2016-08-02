@@ -27,6 +27,6 @@
   },
   "dependencies": {
     "debug": "^2.2.0",
-    "dec0de": "^0.1.2"
+    "dec0de": "^0.2.0"
   }
 }
