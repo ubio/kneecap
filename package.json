@@ -26,6 +26,7 @@
     "should": "10.0.x"
   },
   "dependencies": {
+    "debug": "^2.2.0",
     "dec0de": "^0.1.2"
   }
 }
