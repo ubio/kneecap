@@ -226,7 +226,8 @@ describe('integration', () => {
         icapServer.requestHandler('/request', function(request) {
             return request.getRawBody()
                 .then(body => {
-                    Object.keys(qs.parse(body.toString())).length.should.equal(Object.keys(form).length);
+                    Object.keys(qs.parse(body.toString())).length
+                        .should.equal(Object.keys(form).length);
                     done();
                 })
                 .catch(done);

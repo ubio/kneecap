@@ -26,7 +26,6 @@ const Decoder = require('dec0de');
 module.exports = function createDecoder(socket, events) {
 
     let decoded = null;
-    let reading = false;
 
     const decoder = new Decoder(handleNewRequest);
 
@@ -35,8 +34,38 @@ module.exports = function createDecoder(socket, events) {
         decoder.decode(data);
     });
 
+    return {
+        getDecodedMessage,
+        acceptNewRequest,
+        acceptBody
+    };
+
+    function getDecodedMessage() {
+        assert(decoded, 'ICAP request not decoded');
+        return decoded;
+    }
+
+    function appendBodyChunk(chunk) {
+        const bodyBuffer = decoded.encapsulated[decoded.icapDetails.bodyType];
+        decoded.encapsulated[decoded.icapDetails.bodyType] = Buffer.concat([bodyBuffer, chunk]);
+    }
+
+    function finishRead() {
+        debug('finish read');
+        events.emit('end');
+    }
+
+    function acceptNewRequest() {
+        decoder.use(handleNewRequest);
+    }
+
+    function acceptBody() {
+        decoder.use(handleChunkedBody);
+    }
+
+    // Protocol handlers
+
     function* handleNewRequest() {
-        reading = true;
         const icapDetails = parser.parseIcapDetails(
             yield buf => buf.indexOf(ICAP_HEADERS_DELIMITER));
         yield ICAP_HEADERS_DELIMITER;
@@ -100,42 +129,6 @@ module.exports = function createDecoder(socket, events) {
         debug(bodyType);
         events.emit(bodyType);
         finishRead();
-    }
-
-    return {
-        getDecodedMessage,
-        acceptNewRequest,
-        acceptBody,
-        isReadFinished
-    };
-
-    function getDecodedMessage() {
-        assert(decoded, 'ICAP request not decoded');
-        return decoded;
-    }
-
-    function appendBodyChunk(chunk) {
-        const bodyBuffer = decoded.encapsulated[decoded.icapDetails.bodyType];
-        decoded.encapsulated[decoded.icapDetails.bodyType] = Buffer.concat([bodyBuffer, chunk]);
-    }
-
-    function finishRead() {
-        debug('finish read');
-        events.emit('end');
-        reading = false;
-        acceptNewRequest();
-    }
-
-    function acceptNewRequest() {
-        decoder.use(handleNewRequest);
-    }
-
-    function acceptBody() {
-        decoder.use(handleChunkedBody);
-    }
-
-    function isReadFinished() {
-        return !reading;
     }
 
 };

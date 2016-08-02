@@ -4,7 +4,11 @@ const PROXY_PORT = 8000;
 const ICAP_PORT = 8001;
 const HTTP_TEST_PORT = 8002;
 
-const PROXY_HOST = '192.168.99.100';
+const PROXY_HOST = process.env.PROXY_HOST || 'localhost';
+
+// Must be your host's address, different than localhost when using docker
+const LOCAL_IP_ADDRESS = process.env.LOCAL_IP_ADDRESS || '127.0.0.1';
+
 const PROXY_URL = `http://${PROXY_HOST}:${PROXY_PORT}/`;
 
 const createServer = require('../src/server.js');
@@ -85,7 +89,6 @@ describe('ICAP server', () => {
                     'x-unmodified': 'Hello'
                 };
                 events.once('request', req => {
-                    console.log(req.headers);
                     Object.keys(headers)
                         .forEach(name => {
                             req.headers[name].should.equal(headers[name]);
@@ -95,7 +98,7 @@ describe('ICAP server', () => {
                 makeRequest('GET', headers);
             });
 
-            it('should not transform request bodies', done => {
+            it.only('should not transform request bodies', done => {
                 const obj = createLargeObject(300);
                 events.once('request', req => {
                     Object.keys(obj).forEach(key => {
@@ -114,7 +117,7 @@ describe('ICAP server', () => {
         return new Promise((resolve, reject) => {
             request({
                 method,
-                url: `http://192.168.0.2:${HTTP_TEST_PORT}/`,
+                url: `http://${LOCAL_IP_ADDRESS}:${HTTP_TEST_PORT}/`,
                 proxy: PROXY_URL,
                 headers,
                 form

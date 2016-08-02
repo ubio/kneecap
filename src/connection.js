@@ -55,9 +55,6 @@ module.exports = function createConnection(socket) {
         if (bodyType === 'null-body') {
             return Promise.resolve();
         }
-        if (isReadFinished()) {
-            return Promise.resolve(getDecodedEncapsulated(bodyType));
-        }
         return waitForEncapsulated(bodyType);
     }
 
@@ -103,41 +100,28 @@ module.exports = function createConnection(socket) {
         if (bodyType === 'null-body') {
             return Promise.resolve();
         }
-        return Promise.resolve()
-            .then(() => new Promise(resolve => {
-                if (isReadFinished()) {
-                    if (isContinueAllowed()) {
-                        events.on('end', onFullBodyRead);
-                        return sendContinue();
-                    }
-                    return resolve(getDecodedEncapsulated(bodyType));
-                }
-                return waitAndAskForMore();
+        return waitForEncapsulated(bodyType)
+            .then(parsedBody => isContinueAllowed() ? continueAndWait() : parsedBody);
 
-                function waitAndAskForMore() {
-                    events.once('end', () => {
-                        if (isContinueAllowed()) {
-                            events.on('end', onFullBodyRead);
-                            return sendContinue();
-                        }
-                        return resolve(getDecodedEncapsulated(bodyType));
-                    });
-                }
+        function continueAndWait() {
+            return new Promise(resolve => {
+                // 100 Continue
+                respond({
+                    statusCode: 100,
+                    statusText: 'Continue'
+                });
+                // set decoder to append to current body
+                decoder.acceptBody();
+                events.on('end', onFullBodyRead);
 
                 function onFullBodyRead() {
+                    // set decoder back to accept new requests
+                    decoder.acceptNewRequest();
                     events.removeListener('end', onFullBodyRead);
                     resolve(getDecodedEncapsulated(bodyType));
                 }
-
-                function sendContinue() {
-                    decoder.acceptBody();
-                    respond({
-                        statusCode: 100,
-                        statusText: 'Continue'
-                    });
-                }
-
-            }));
+            });
+        }
     }
 
     function badRequest() {
@@ -183,18 +167,6 @@ module.exports = function createConnection(socket) {
 
     function isContinueAllowed() {
         return decoder.getDecodedMessage().allowContinue;
-    }
-
-    /**
-     * Based on the decoder's state, signifies whether there is more
-     * incoming data or not.
-     *
-     * This will return true if one of:
-     * - waiting for a new request (previous session done)
-     * - preview done (but haven't sent `100 Continue` or replied)
-     */
-    function isReadFinished() {
-        return decoder.isReadFinished();
     }
 
 };
