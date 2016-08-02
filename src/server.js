@@ -56,6 +56,8 @@ module.exports = function createServer(options) {
     function handleConnection(socket) {
         const connection = createIcapConnection(socket);
 
+        connection.events.on('error', handleServerError);
+
         connection.events.on('icap-request', icapDetails => {
             const handler = handlers[icapDetails.path];
             if (!handler) {
@@ -79,29 +81,53 @@ module.exports = function createServer(options) {
                 if (!response) {
                     return connection.dontChange();
                 }
+                /**
+                 * bodyFromUser source depends on response.requestHeaders or response.responseHeaders presence
+                 * responseType depends on response.requestHeaders or response.responseHeaders presence
+                 *
+                 * responseDetails = {
+                 *  bodyFromUser: response.requestBody | response.responseBody | undefined
+                 *  requestType: 'request' | 'response'
+                 *  responseType: 'request' | 'response'
+                 * }
+                 */
+                const responseDetails = getBodyDetails(handler.method, response);
+                const requestType = responseDetails.requestType;
+                const responseType = responseDetails.responseType;
+                const bodyFromUser = responseDetails.bodyFromUser;
+                let body;
+                if (bodyFromUser) {
+                    body = sanitizeBody(bodyFromUser);
+                } else if (responseType === requestType) {
+                    body = icapRequest.getRawBody();
+                }
                 return Promise.all([
                     sanitizeRequestHeaders(response.requestHeaders, icapRequest),
                     sanitizeResponseHeaders(response.responseHeaders, icapRequest),
-                    sanitizeBody(response.requestBody, icapRequest),
-                    sanitizeBody(response.responseBody, icapRequest),
+                    body,
                 ])
                     .then(results => {
                         const [
                             requestHeaders,
                             responseHeaders,
-                            requestBody,
-                            responseBody
+                            body
                         ] = results;
-                        connection.respond({
+                        const response = {
                             statusCode: 200,
                             statusText: 'OK',
-                            payload: new Map([
+                        };
+                        if (responseType === 'request') {
+                            response.payload = new Map([
                                 ['req-hdr', requestHeaders],
+                                ['req-body', body]
+                            ]);
+                        } else {
+                            response.payload = new Map([
                                 ['res-hdr', responseHeaders],
-                                ['req-body', requestBody],
-                                ['res-body', responseBody]
-                            ])
-                        });
+                                ['res-body', body]
+                            ]);
+                        }
+                        connection.respond(response);
                     });
             })
                 .catch(err => {
@@ -109,6 +135,30 @@ module.exports = function createServer(options) {
                     connection.badRequest();
                 });
         });
+    }
+
+    function getBodyDetails(method, userResponse) {
+        if (method === 'REQMOD') {
+            const requestType = 'request';
+            if (!!userResponse.responseHeaders) {
+                return {
+                    bodyFromUser: userResponse.responseBody,
+                    responseType: 'response',
+                    requestType
+                };
+            }
+            return {
+                bodyFromUser: userResponse.requestBody,
+                responseType: 'request',
+                requestType
+            };
+        }
+        const requestType = 'response';
+        return {
+            bodyFromUser: userResponse.responseBody,
+            responseType: requestType,
+            requestType
+        };
     }
 
     function handleOptions(connection, handler) {
