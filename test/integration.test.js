@@ -3,10 +3,10 @@
 const PROXY_PORT = 8000; // Must be the same as http_port in test/squid.conf
 const ICAP_PORT = 8001; // Must be the same as icap_service in test/squid.conf
 
-const PROXY_HOST = 'localhost';
-// const PROXY_HOST = '192.168.99.100';
+const PROXY_HOST = process.env.PROXY_HOST || 'localhost';
 
-const LOCAL_IP_ADDRESS = '127.0.0.1'; // Must be your host's address, different than localhost when using docker
+// Must be your host's address, different than localhost when using docker
+const LOCAL_IP_ADDRESS = process.env.LOCAL_IP_ADDRESS || '127.0.0.1';
 
 const PROXY_URL = `http://${PROXY_HOST}:${PROXY_PORT}/`;
 
@@ -23,7 +23,7 @@ const urlencodedParser = bodyParser.urlencoded({
 const should = require('should');
 const kneecap = require('../src/server.js');
 
-describe.only('integration', () => {
+describe('integration', () => {
     let _server, _proxyPid, icapServer;
     let waitForRequest = Promise.reject(new Error('waitForRequest not changed'));
 

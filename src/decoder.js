@@ -1,14 +1,16 @@
 'use strict';
 
 const ICAP_HEADERS_DELIMITER = Buffer.from('\r\n\r\n');
-const ICAP_PREVIEW_EOF_DELIMITER = Buffer.from('0; ieof\r\n\r\n');
-const ICAP_BODY_DELIMITER = Buffer.from('0\r\n\r\n');
+const ICAP_PREVIEW_EOF = Buffer.from('0; ieof');
+const ICAP_BODY_EOF = Buffer.from('0');
 
-const CHUNK_SEPARATOR = Buffer.from('\r\n');
+const NEWLINE = Buffer.from('\r\n');
 
 const parser = require('./parser');
 const debug = require('debug')('icap:decoder');
 const assert = require('assert');
+
+const Decoder = require('dec0de');
 
 /**
  * Reads socket data and emits `events`:
@@ -23,165 +25,93 @@ const assert = require('assert');
  */
 module.exports = function createDecoder(socket, events) {
 
-    let state = 'new-request';
-    let buffer = Buffer.alloc(0);
     let decoded = null;
+    let reading = false;
 
-    let encRegionIdx = 0;
+    const decoder = new Decoder(handleNewRequest);
 
-    socket.on('data', onData);
+    socket.on('data', data => {
+        // console.log('\n\n\n=====\n' + data + '\n=====\n\n\n');
+        decoder.decode(data);
+    });
 
-    return {
-        getDecodedMessage,
-        getState,
-        setState
-    };
-
-    function getDecodedMessage() {
-        assert(decoded, 'ICAP request not decoded');
-        return decoded;
-    }
-
-    function getState() {
-        return state;
-    }
-
-    function setState(newState) {
-        state = newState;
-    }
-
-    function onData(data) {
-        buffer = Buffer.concat([buffer, data]);
-        decode();
-    }
-
-    function decode() {
-        try {
-            const returnValue = handleCurrentState();
-            if (returnValue === false) {
-                // need more data
-                return;
-            }
-            // TODO check that buffer is consumed!
-        } catch (e) {
-            // Decoder errors are unrecoverable (socket is closed)
-            buffer = Buffer.alloc(0);
-            events.emit('error', e);
-            socket.close();
-        }
-        // Impl. note: decoders should fully consume buffer
-        if (buffer.length) {
-            decode();
-        }
-    }
-
-    function handleCurrentState() {
-        switch (state) {
-            case 'new-request':
-                return readIcapDetails();
-            case 'read-encapsulated':
-                return readEncapsulatedSection();
-            case 'read-chunked-body':
-                return readChunkedBody();
-            default:
-                throw new Error('Illegal state: ' + state);
-        }
-    }
-
-    function readIcapDetails() {
-        const idx = buffer.indexOf(ICAP_HEADERS_DELIMITER);
-        if (idx === -1) {
-            return false;
-        }
-        const icapDetails = parser.parseIcapDetails(consume(idx));
-        consume(ICAP_HEADERS_DELIMITER.length);
+    function* handleNewRequest() {
+        reading = true;
+        const icapDetails = parser.parseIcapDetails(
+            yield buf => buf.indexOf(ICAP_HEADERS_DELIMITER));
+        yield ICAP_HEADERS_DELIMITER;
         decoded = {
             icapDetails,
             encapsulated: {},
             previewMode: icapDetails.headers.has('preview'),
             allowContinue: false
         };
-        encRegionIdx = 0;
         debug('new request', icapDetails.method, icapDetails.path);
-        setState('read-encapsulated');
         events.emit('icap-request', icapDetails);
+        yield* handleEncapsulatedSections();
     }
 
-    function readEncapsulatedSection() {
-        const region = decoded.icapDetails.encapsulatedRegions[encRegionIdx];
-        if (!region) {
-            return finishRead();
-        }
-
-        const nextRegion = decoded.icapDetails.encapsulatedRegions[encRegionIdx + 1];
-        if (nextRegion) {
-            // case 1: region has explicit length (all -hdr, basically)
-            const length = nextRegion.startOffset - region.startOffset;
-            if (buffer.length < length) {
-                // Read more data
-                return false;
+    function* handleEncapsulatedSections() {
+        for (let i = 0; i < decoded.icapDetails.encapsulatedRegions.length; i++) {
+            const region = decoded.icapDetails.encapsulatedRegions[i];
+            const nextRegion = decoded.icapDetails.encapsulatedRegions[i + 1];
+            if (nextRegion) {
+                // case 1: region has explicit length (all -hdr, basically)
+                const length = nextRegion.startOffset - region.startOffset;
+                decoded.encapsulated[region.section] = yield length;
+                debug(region.section);
+                events.emit(region.section);
+            } else if (region.section === 'null-body') {
+                // case 2: null body
+                return finishRead();
+            } else {
+                // case 3: last region (-body) is chunked and ends with terminator
+                decoded.encapsulated[region.section] = Buffer.alloc(0);
+                yield* handleChunkedBody();
             }
-            decoded.encapsulated[region.section] = consume(length);
-            debug(region.section);
-            events.emit(region.section);
-            // read next encapsulated part
-            encRegionIdx += 1;
-            setState('read-encapsulated');
-        } else if (region.section === 'null-body') {
-            // case 2: null body
-            return finishRead();
-        } else {
-            // case 3: last region (-body) is chunked and ends with terminator
-            decoded.encapsulated[region.section] = Buffer.alloc(0);
-            encRegionIdx += 1;
-            setState('read-chunked-body');
         }
     }
 
-    function readChunkedBody() {
-        if (isAt(ICAP_BODY_DELIMITER)) {
-            consume(ICAP_BODY_DELIMITER.length);
-            // only allow continue if we're in preview mode
-            decoded.allowContinue = decoded.previewMode;
-            return finish();
+    function* handleChunkedBody() {
+        while (true) {
+            const delimBuf = yield buf => buf.indexOf(NEWLINE);
+            yield NEWLINE;
+            // Check terminators
+            if (delimBuf.equals(ICAP_PREVIEW_EOF)) {
+                decoded.allowContinue = false;
+                break;
+            } else if (delimBuf.equals(ICAP_BODY_EOF)) {
+                // only allow continue if we're in preview mode
+                decoded.allowContinue = decoded.previewMode;
+                break;
+            }
+            const len = parseInt(delimBuf.toString(), 16);
+            if (!len) {
+                throw new Error('Expected chunk length or terminator, ' +
+                    'got: ' + delimBuf.toString());
+            }
+            appendBodyChunk(yield len);
+            yield NEWLINE;
         }
-        if (isAt(ICAP_PREVIEW_EOF_DELIMITER)) {
-            consume(ICAP_PREVIEW_EOF_DELIMITER.length);
-            decoded.allowContinue = false;
-            return finish();
-        }
+        // Finish read body
+        yield NEWLINE;
+        decoded.previewMode = false;
+        const bodyType = decoded.icapDetails.bodyType;
+        debug(bodyType);
+        events.emit(bodyType);
+        finishRead();
+    }
 
-        // Extract chunk size
-        const chunkSeparatorIx = buffer.indexOf(CHUNK_SEPARATOR);
-        if (chunkSeparatorIx === -1) {
-            return false;
-        }
-        const chunkSize = parseInt(buffer.slice(0, chunkSeparatorIx).toString(), 16);
-        if (chunkSize === 0) {
-            // this should be a body terminator, demand more data!
-            return false;
-        }
+    return {
+        getDecodedMessage,
+        acceptNewRequest,
+        acceptBody,
+        isReadFinished
+    };
 
-        // Extract chunk itself
-        const remaining = buffer.slice(chunkSeparatorIx + CHUNK_SEPARATOR.length);
-        if (remaining.length < chunkSize) {
-            return false;
-        }
-        appendBodyChunk(remaining.slice(0, chunkSize));
-
-        // Now we can finally shrink our buffer
-        consume(chunkSeparatorIx + CHUNK_SEPARATOR.length + chunkSize + CHUNK_SEPARATOR.length);
-
-        // Continue
-        setState('read-chunked-body');
-
-        function finish() {
-            decoded.previewMode = false;
-            const bodyType = decoded.icapDetails.bodyType;
-            debug(bodyType);
-            events.emit(bodyType);
-            return finishRead();
-        }
+    function getDecodedMessage() {
+        assert(decoded, 'ICAP request not decoded');
+        return decoded;
     }
 
     function appendBodyChunk(chunk) {
@@ -190,24 +120,22 @@ module.exports = function createDecoder(socket, events) {
     }
 
     function finishRead() {
-        // By default we accept new request after all encapsulated regions
-        // are read. The exception is "100 Continue" which will
-        // set a separate state.
-        setState('new-request');
         debug('finish read');
         events.emit('end');
+        reading = false;
+        acceptNewRequest();
     }
 
-    function consume(length) {
-        const result = buffer.slice(0, length);
-        assert(result.length === length,
-            'Insufficient data! Please fix decoder by checking that data is available.');
-        buffer = buffer.slice(length);
-        return result;
+    function acceptNewRequest() {
+        decoder.use(handleNewRequest);
     }
 
-    function isAt(prefix) {
-        return buffer.slice(0, prefix.length).equals(prefix);
+    function acceptBody() {
+        decoder.use(handleChunkedBody);
     }
-    
+
+    function isReadFinished() {
+        return !reading;
+    }
+
 };

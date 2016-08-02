@@ -130,7 +130,7 @@ module.exports = function createConnection(socket) {
                 }
 
                 function sendContinue() {
-                    decoder.setState('read-chunked-body');
+                    decoder.acceptBody();
                     respond({
                         statusCode: 100,
                         statusText: 'Continue'
@@ -194,7 +194,7 @@ module.exports = function createConnection(socket) {
      * - preview done (but haven't sent `100 Continue` or replied)
      */
     function isReadFinished() {
-        return decoder.getState() === 'new-request';
+        return decoder.isReadFinished();
     }
 
 };
