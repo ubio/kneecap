@@ -3,6 +3,8 @@
 const net = require('net');
 const createConnection = require('../src/connection.js');
 
+const samples = require('./samples');
+
 describe('connection', () => {
 
     let server = null;
@@ -37,7 +39,7 @@ describe('connection', () => {
     describe('new request', () => {
 
         it('should parse requests without bodies', done => {
-            client.write(getIcapOPTIONS());
+            client.write(samples.OPTIONS);
             connection.events.on('icap-request', icapDetails => {
                 icapDetails.method.should.equal('OPTIONS');
                 icapDetails.headers.get('host').should.equal('127.0.0.1:8001');
@@ -54,7 +56,7 @@ describe('connection', () => {
                 icapDetails.version.should.equal('ICAP/1.0');
                 done();
             });
-            const lines = getIcapOPTIONS().split('\r\n');
+            const lines = samples.OPTIONS.split('\r\n');
             lines.reduce((flow, line) => {
                 return flow
                     .then(() => client.write(line))
@@ -66,7 +68,7 @@ describe('connection', () => {
         });
 
         it('should parse requests with encapsulated headers', done => {
-            client.write(getIcapREQMOD());
+            client.write(samples.REQMOD.noBody);
             connection.events.on('icap-request', icapDetails => {
                 icapDetails.headers.size.should.equal(5);
                 done();
@@ -78,7 +80,7 @@ describe('connection', () => {
     describe('encapsulated headers', () => {
 
         it('should parse HTTP headers without body', done => {
-            client.write(getIcapREQMOD());
+            client.write(samples.REQMOD.noBody);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
@@ -91,7 +93,7 @@ describe('connection', () => {
         });
 
         it('should parse headers with preview body', done => {
-            client.write(getIcapREQMODPreview());
+            client.write(samples.REQMOD.preview);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
@@ -104,7 +106,7 @@ describe('connection', () => {
         });
 
         it('should parse headers with full preview body', done => {
-            client.write(getIcapREQMODPreviewFull());
+            client.write(samples.REQMOD.previewFull);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
@@ -117,7 +119,7 @@ describe('connection', () => {
         });
 
         it('should parse headers with full body (no preview)', done => {
-            client.write(getIcapREQMODFullBody());
+            client.write(samples.REQMOD.noPreview);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-hdr')
                     .then(buffer => {
@@ -134,7 +136,7 @@ describe('connection', () => {
     describe('parsing encapsulated body', () => {
 
         it('should parse preview body', done => {
-            client.write(getIcapREQMODPreview());
+            client.write(samples.REQMOD.preview);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-body')
                     .then(buffer => {
@@ -147,7 +149,7 @@ describe('connection', () => {
         });
 
         it('should parse full preview body', done => {
-            client.write(getIcapREQMODPreviewFull());
+            client.write(samples.REQMOD.previewFull);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-body')
                     .then(buffer => {
@@ -160,7 +162,7 @@ describe('connection', () => {
         });
 
         it('should parse full body (no preview)', done => {
-            client.write(getIcapREQMODFullBody());
+            client.write(samples.REQMOD.noPreview);
             connection.events.on('icap-request', () => {
                 connection.waitForEncapsulated('req-body')
                     .then(buffer => {
@@ -172,14 +174,36 @@ describe('connection', () => {
             });
         });
 
+        it('should parse full body (preview + continue)', done => {
+            client.write(samples.REQMOD.preview);
+            connection.events.on('icap-request', () => {
+                connection.getFullBody()
+                    .then(body => {
+                        const pairs = body.toString().split('&')
+                            .map(pair => {
+                                const [ key, value ] = pair.split('=');
+                                return { key, value };
+                            });
+                        pairs.length.should.equal(2);
+                        pairs[0].key.should.equal('k0');
+                        pairs[0].value.length.should.equal(5 * 99);
+                        pairs[1].key.should.equal('k1');
+                        pairs[1].value.length.should.equal(5 * 99);
+                        done();
+                    })
+                    .catch(done);
+                setTimeout(() => client.write(samples.REQMOD.previewContinue), 50);
+            });
+        });
+
     });
 
     describe('multiple requests', () => {
 
         it('should handle multiple requests via one socket', done => {
             const methods = [];
-            client.write(getIcapOPTIONS());
-            client.write(getIcapREQMOD());
+            client.write(samples.OPTIONS);
+            client.write(samples.REQMOD.noBody);
             connection.events.on('icap-request', icapDetails => {
                 methods.push(icapDetails.method);
             });
@@ -191,11 +215,11 @@ describe('connection', () => {
 
         it('should handle loads of them', done => {
             const methods = [];
-            client.write(getIcapREQMOD());
-            client.write(getIcapREQMODFullBody());
-            client.write(getIcapREQMODPreview());
-            client.write(getIcapREQMODPreviewFull());
-            client.write(getIcapOPTIONS());
+            client.write(samples.REQMOD.noBody);
+            client.write(samples.REQMOD.previewFull);
+            client.write(samples.REQMOD.preview);
+            client.write(samples.REQMOD.previewFull);
+            client.write(samples.OPTIONS);
             connection.events.on('icap-request', icapDetails => {
                 methods.push(icapDetails.method);
             });
@@ -215,93 +239,3 @@ describe('connection', () => {
 
 });
 
-function getIcapOPTIONS() {
-    return [
-        'OPTIONS icap://127.0.0.1:8001/request ICAP/1.0',
-        'Host: 127.0.0.1:8001',
-        'Allow: 206',
-        '',
-        ''
-    ].join('\r\n');
-}
-
-function getIcapREQMOD() {
-    return [
-        'REQMOD icap://127.0.0.1:8001/request ICAP/1.0',
-        'Host: 127.0.0.1:8001',
-        'Date: Wed, 27 Jul 2016 07:56:17 GMT',
-        'Encapsulated: req-hdr=0, null-body=92',
-        'Preview: 0',
-        'Allow: 204',
-        '',
-        'GET http://localhost:58285/ HTTP/1.1',
-        'X-Change-Me: my-test-header',
-        'Host: localhost:58285',
-        '',
-        ''
-    ].join('\r\n');
-}
-
-function getIcapREQMODPreview() {
-    return [
-        'REQMOD icap://127.0.0.1:8001/request ICAP/1.0',
-        'Host: 127.0.0.1:8001',
-        'Date: Wed, 27 Jul 2016 11:16:43 GMT',
-        'Encapsulated: req-hdr=0, req-body=137',
-        'Preview: 10',
-        '',
-        'POST http://localhost:48191/ HTTP/1.1',
-        'Content-Type: application/x-www-form-urlencoded',
-        'Content-Length: 494989',
-        'Host: localhost:48191',
-        '',
-        'a',
-        'k0=valueva',
-        '0',
-        '',
-        ''
-    ].join('\r\n');
-}
-
-function getIcapREQMODPreviewFull() {
-    return [
-        'REQMOD icap://127.0.0.1:8001/request ICAP/1.0',
-        'Host: 127.0.0.1:8001',
-        'Date: Wed, 27 Jul 2016 11:24:40 GMT',
-        'Encapsulated: req-hdr=0, req-body=133',
-        'Preview: 17',
-        'Allow: 204',
-        '',
-        'POST http://localhost:42633/ HTTP/1.1',
-        'Content-Type: application/x-www-form-urlencoded',
-        'Content-Length: 17',
-        'Host: localhost:42633',
-        '',
-        '11',
-        'testkey=testvalue',
-        '0; ieof',
-        '',
-        ''
-    ].join('\r\n');
-}
-
-function getIcapREQMODFullBody() {
-    return [
-        'REQMOD icap://127.0.0.1:8001/request ICAP/1.0',
-        'Host: 127.0.0.1:8001',
-        'Date: Wed, 27 Jul 2016 11:26:22 GMT',
-        'Encapsulated: req-hdr=0, req-body=133',
-        'Allow: 204',
-        '',
-        'POST http://localhost:39985/ HTTP/1.1',
-        'Content-Type: application/x-www-form-urlencoded',
-        'Content-Length: 17',
-        'Host: localhost:39985',
-        '',
-        '11',
-        'testkey=testvalue',
-        '0',
-        '',
-        ''
-    ].join('\r\n');
-}

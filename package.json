@@ -24,5 +24,9 @@
     "mocha": "2.5.x",
     "request": "2.73.x",
     "should": "10.0.x"
+  },
+  "dependencies": {
+    "debug": "^2.2.0",
+    "dec0de": "^0.1.2"
   }
 }
