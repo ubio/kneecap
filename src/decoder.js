@@ -34,6 +34,10 @@ module.exports = function createDecoder(socket, events) {
         decoder.decode(data);
     });
 
+    socket.on('error', err => {
+        events.emit('error', err);
+    });
+
     return {
         getDecodedMessage,
         acceptNewRequest,
