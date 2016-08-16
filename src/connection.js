@@ -148,10 +148,14 @@ module.exports = function createConnection(socket) {
         }
         return Promise.all(promises)
             .then(() => {
+                const response = objectToMap(decoder.getDecodedMessage().encapsulated);
+                if (response.has('res-body')) {
+                    response.delete('req-hdr');
+                }
                 return respond({
                     statusCode: 200,
                     statusText: 'OK',
-                    payload: objectToMap(decoder.getDecodedMessage().encapsulated)
+                    payload: response
                 });
             });
     }
