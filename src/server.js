@@ -2,6 +2,7 @@
 
 const net = require('net');
 const EventEmitter = require('events').EventEmitter;
+const debug = require('debug')('server');
 
 const createIcapConnection = require('./connection.js');
 const createIcapRequest = require('./request.js');
@@ -79,6 +80,7 @@ module.exports = function createServer(options) {
             }
             return promise.then(response => {
                 if (!response) {
+                    debug('dontChange');
                     return connection.dontChange();
                 }
                 /**
@@ -96,6 +98,7 @@ module.exports = function createServer(options) {
                 const responseType = responseDetails.responseType;
                 const bodyFromUser = responseDetails.bodyFromUser;
                 let body;
+                debug(`body from ${responseType} ${bodyFromUser ? 'user' : 'icap'}`);
                 if (bodyFromUser) {
                     body = sanitizeBody(bodyFromUser);
                 } else if (responseType === requestType) {
