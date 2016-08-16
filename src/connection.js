@@ -149,8 +149,9 @@ module.exports = function createConnection(socket) {
         return Promise.all(promises)
             .then(() => {
                 const response = objectToMap(decoder.getDecodedMessage().encapsulated);
-                if (response.has('res-body')) {
+                if (response.has('res-hdr')) {
                     response.delete('req-hdr');
+                    response.delete('req-body');
                 }
                 return respond({
                     statusCode: 200,
