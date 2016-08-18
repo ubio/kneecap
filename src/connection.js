@@ -184,7 +184,7 @@ module.exports = function createConnection(socket) {
     function dontChange() {
         assertConnected();
         const allow = getIcapDetails().headers.get('allow') || '';
-        if (allow.includes('204')) {
+        if (allow.includes('204') || hasPreview()) {
             return respond({
                 statusCode: 204,
                 statusText: 'No Content'
