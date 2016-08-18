@@ -61,81 +61,91 @@ module.exports = function createServer(options) {
 
         connection.events.on('icap-request', icapDetails => {
             const handler = handlers[icapDetails.path];
-            if (!handler) {
-                return connection.badRequest();
-            }
 
-            if (icapDetails.method === 'OPTIONS') {
-                return handleOptions(connection, handler);
-            }
+            try {
+                if (!handler) {
+                    return connection.badRequest();
+                }
 
-            if (handler.method !== icapDetails.method) {
-                return connection.badRequest();
+                if (icapDetails.method === 'OPTIONS') {
+                    return handleOptions(connection, handler);
+                }
+
+                if (handler.method !== icapDetails.method) {
+                    return connection.badRequest();
+                }
+
+            } catch (err) {
+                events.emit('error', err);
+                return;
             }
 
             const icapRequest = createIcapRequest(icapDetails, connection);
-            const promise = handler.fn(icapRequest);
-            if (!promise) {
-                return connection.dontChange();
-            }
-            return promise.then(response => {
-                if (!response) {
-                    debug('dontChange');
-                    return connection.dontChange();
-                }
-                /**
-                 * bodyFromUser source depends on response.requestHeaders or response.responseHeaders presence
-                 * responseType depends on response.requestHeaders or response.responseHeaders presence
-                 *
-                 * responseDetails = {
-                 *  bodyFromUser: response.requestBody | response.responseBody | undefined
-                 *  requestType: 'request' | 'response'
-                 *  responseType: 'request' | 'response'
-                 * }
-                 */
-                const responseDetails = getBodyDetails(handler.method, response);
-                const requestType = responseDetails.requestType;
-                const responseType = responseDetails.responseType;
-                const bodyFromUser = responseDetails.bodyFromUser;
-                let body;
-                debug(`body from ${responseType} ${bodyFromUser ? 'user' : 'icap'}`);
-                if (bodyFromUser) {
-                    body = sanitizeBody(bodyFromUser);
-                } else if (responseType === requestType) {
-                    body = sanitizeBody(icapRequest.getRawBody());
-                }
-                return Promise.all([
-                    sanitizeRequestHeaders(response.requestHeaders, icapRequest),
-                    sanitizeResponseHeaders(response.responseHeaders, icapRequest),
-                    body,
-                ])
-                    .then(results => {
-                        const [
-                            requestHeaders,
-                            responseHeaders,
-                            body
-                        ] = results;
-                        const response = {
-                            statusCode: 200,
-                            statusText: 'OK',
-                        };
-                        if (responseType === 'request') {
-                            response.payload = new Map([
-                                ['req-hdr', requestHeaders],
-                                ['req-body', body]
-                            ]);
-                        } else {
-                            response.payload = new Map([
-                                ['res-hdr', responseHeaders],
-                                ['res-body', body]
-                            ]);
-                        }
-                        connection.respond(response);
-                    });
-            })
+
+            Promise.resolve()
+                .then(() => handler.fn(icapRequest))
+                .then(response => {
+
+                    if (!response) {
+                        debug('dontChange');
+                        return connection.dontChange();
+                    }
+                    /**
+                     * bodyFromUser source depends on response.requestHeaders or response.responseHeaders presence
+                     * responseType depends on response.requestHeaders or response.responseHeaders presence
+                     *
+                     * responseDetails = {
+                     *  bodyFromUser: response.requestBody | response.responseBody | undefined
+                     *  requestType: 'request' | 'response'
+                     *  responseType: 'request' | 'response'
+                     * }
+                     */
+                    const responseDetails = getBodyDetails(handler.method, response);
+                    const requestType = responseDetails.requestType;
+                    const responseType = responseDetails.responseType;
+                    const bodyFromUser = responseDetails.bodyFromUser;
+                    let body;
+                    debug(`body from ${responseType} ${bodyFromUser ? 'user' : 'icap'}`);
+                    if (bodyFromUser) {
+                        body = sanitizeBody(bodyFromUser);
+                    } else if (responseType === requestType) {
+                        body = sanitizeBody(icapRequest.getRawBody());
+                    }
+                    return Promise.all([
+                        sanitizeRequestHeaders(response.requestHeaders, icapRequest),
+                        sanitizeResponseHeaders(response.responseHeaders, icapRequest),
+                        body,
+                    ])
+                        .then(results => {
+                            const [
+                                requestHeaders,
+                                responseHeaders,
+                                body
+                            ] = results;
+                            const response = {
+                                statusCode: 200,
+                                statusText: 'OK',
+                            };
+                            if (responseType === 'request') {
+                                response.payload = new Map([
+                                    ['req-hdr', requestHeaders],
+                                    ['req-body', body]
+                                ]);
+                            } else {
+                                response.payload = new Map([
+                                    ['res-hdr', responseHeaders],
+                                    ['res-body', body]
+                                ]);
+                            }
+                            connection.respond(response);
+                        });
+                })
                 .catch(err => {
                     console.log('handler threw', err);
-                    connection.badRequest();
+                    events.emit('error', err);
+                    if (!connection.isClosed()) {
+                        connection.badRequest();
+                    }
                 });
         });
     }

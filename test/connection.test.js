@@ -5,7 +5,7 @@ const createConnection = require('../src/connection.js');
 
 const samples = require('./samples');
 
-describe('connection', () => {
+describe.only('connection', () => {
 
     let server = null;
     let client = null;
@@ -25,10 +25,14 @@ describe('connection', () => {
     });
 
     afterEach(done => {
-        client.on('close', done);
-        client.destroy();
-        client = null;
-        connection = null;
+        if (!client.destroyed) {
+            client.on('close', done);
+            client.destroy();
+            client = null;
+            connection = null;
+        } else {
+            done();
+        }
     });
 
     afterEach(done => {
@@ -233,6 +237,23 @@ describe('connection', () => {
                 ]);
                 done();
             }, 100);
+        });
+
+    });
+
+    describe('connection closed', () => {
+
+        it('should throw', done => {
+            client.write(samples.REQMOD.preview);
+            setTimeout(() => {
+                try {
+                    connection.dontChange();
+                    done(new Error('Should throw'));
+                } catch (e) {
+                    done();
+                }
+            }, 50);
+            client.destroy();
         });
 
     });
