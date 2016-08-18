@@ -141,7 +141,6 @@ module.exports = function createServer(options) {
                         });
                 })
                 .catch(err => {
-                    console.log('handler threw', err);
                     events.emit('error', err);
                     if (!connection.isClosed()) {
                         connection.badRequest();
