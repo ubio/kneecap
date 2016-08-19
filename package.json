@@ -2,9 +2,11 @@
   "name": "kneecap",
   "version": "1.6.0",
   "description": "",
-  "main": "src/server.js",
+  "main": "build/server.js",
   "scripts": {
-    "test": "mocha --timeout 5000 test/*.test.js"
+    "test": "npm run compile && mocha --timeout 5000 test/*.test.js",
+    "compile": "babel --plugins transform-async-to-generator -d build/ src/",
+    "prepublish": "npm run compile"
   },
   "repository": {
     "type": "git",
@@ -19,6 +21,9 @@
   },
   "homepage": "https://github.com/universalbasket/kneecap",
   "devDependencies": {
+    "babel-cli": "6.11.x",
+    "babel-plugin-transform-async-to-generator": "6.8.x",
+    "jsdox": "0.4.x",
     "body-parser": "1.15.x",
     "eslint": "^3.1.1",
     "mocha": "2.5.x",

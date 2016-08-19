@@ -6,65 +6,29 @@ const ICAP_BODY_EOF = Buffer.from('0');
 
 const NEWLINE = Buffer.from('\r\n');
 
-const parser = require('./parser');
-const debug = require('debug')('icap:decoder');
-const assert = require('assert');
-
+const debug = require('debug');
 const Decoder = require('dec0de');
 
-/**
- * Reads socket data and emits `events`:
- *
- * * error — unrecoverable error (socket will be closed)
- * * icap-request — ICAP request headers are read and parsed
- * * end — socket read operation is finished, emitted in three conditions:
- *
- *         1) no preview and all encapsulated body is parsed
- *         2) preview + encapsulated preview is parsed
- *         3) preview + 100 continue sent + rest of body is parsed
- */
+const parser = require('./parser.js');
+const BodyStream = require('./body.js');
+
 module.exports = function createDecoder(socket, events) {
-
     let decoded = null;
-
     const decoder = new Decoder(handleNewRequest);
 
     socket.on('data', data => {
-        // console.log('\n\n\n=====\n' + data + '\n=====\n\n\n');
         decoder.decode(data);
     });
 
-    return {
-        getDecodedMessage,
-        acceptNewRequest,
-        acceptBody
-    };
-
-    function getDecodedMessage() {
-        assert(decoded, 'ICAP request not decoded');
-        return decoded;
-    }
-
-    function acceptNewRequest() {
-        decoder.use(handleNewRequest);
-    }
-
-    function acceptBody() {
-        delete decoded.encapsulated[decoded.icapDetails.bodyType];
-        decoder.use(handleChunkedBody);
-    }
-
-    // Protocol handlers
-
     function* handleNewRequest() {
-        const icapDetails = parser.parseIcapDetails(
-            yield buf => buf.indexOf(ICAP_HEADERS_DELIMITER));
-        yield ICAP_HEADERS_DELIMITER;
+        const icapDetails = parser.parseIcapDetails(yield getIndexOf(ICAP_HEADERS_DELIMITER));
+        yield ICAP_HEADERS_DELIMITER; // the delimiter must also be consumed
         decoded = {
             icapDetails,
             encapsulated: {},
             previewMode: icapDetails.headers.has('preview'),
-            allowContinue: false
+            allowContinue: false,
+            // bodyStream
         };
         debug('new request', icapDetails.method, icapDetails.path);
         events.emit('icap-request', icapDetails);
@@ -72,7 +36,7 @@ module.exports = function createDecoder(socket, events) {
     }
 
     function* handleEncapsulatedSections() {
-        for (let i = 0; i < decoded.icapDetails.encapsulatedRegions.length; i++) {
+        for (let i = 0; i < decoded.icapDetails.encapsulatedRegions.length; ++i) {
             const region = decoded.icapDetails.encapsulatedRegions[i];
             const nextRegion = decoded.icapDetails.encapsulatedRegions[i + 1];
             if (nextRegion) {
@@ -84,15 +48,16 @@ module.exports = function createDecoder(socket, events) {
                 return finishRead();
             } else {
                 // case 3: last region (-body) is chunked and ends with terminator
-                yield* handleChunkedBody();
+                decoded.bodyStream = new BodyStream();
+                yield* decoded.bodyStream.waitForReadStart();
             }
         }
     }
 
     function* handleChunkedBody() {
         while (true) {
-            const delimBuf = yield buf => buf.indexOf(NEWLINE);
-            yield NEWLINE;
+            const delimBuf = yield getIndexOf(NEWLINE);
+            yield NEWLINE; // the delimiter must also be consumed
             // Check terminators
             if (delimBuf.equals(ICAP_PREVIEW_EOF)) {
                 decoded.allowContinue = false;
@@ -102,20 +67,24 @@ module.exports = function createDecoder(socket, events) {
                 decoded.allowContinue = decoded.previewMode;
                 break;
             }
-            const len = parseInt(delimBuf.toString(), 16);
-            if (!len) {
-                throw new Error('Expected chunk length or terminator, ' +
-                    'got: ' + delimBuf.toString());
-            }
-            appendBodyChunk(yield len);
+            yield* handleBodyChunk(delimBuf);
             yield NEWLINE;
         }
-        // Finish read body
-        yield NEWLINE;
-        decoded.previewMode = false;
-        const bodyType = decoded.icapDetails.bodyType;
-        sectionParseDone(bodyType, decoded.bodyBuffer);
-        finishRead();
+    }
+
+    function* handleBodyChunk(delimBuf) {
+        const len = parseInt(delimBuf.toString(), 16);
+        let total = 0;
+        if (!len) {
+            throw new Error('Expected chunk length or terminator, ' +
+                'got: ' + delimBuf.toString());
+        }
+        return function*(buffer) {
+            if (buffer.length + total < len) {
+                // decoded.bodyStream
+                return buffer.length;
+            }
+        };
     }
 
     // Utilities
@@ -126,14 +95,14 @@ module.exports = function createDecoder(socket, events) {
         events.emit(section, buffer);
     }
 
-    function appendBodyChunk(chunk) {
-        events.emit('body-data', chunk);
-        // decoded.bodyBuffer = Buffer.concat([decoded.bodyBuffer, chunk]);
-    }
-
     function finishRead() {
         debug('finish read');
         events.emit('end');
     }
-
 };
+
+function getIndexOf(value) {
+    return function(buffer) {
+        return buffer.indexOf(value);
+    };
+}

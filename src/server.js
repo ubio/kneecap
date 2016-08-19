@@ -4,7 +4,7 @@ const net = require('net');
 const EventEmitter = require('events').EventEmitter;
 const debug = require('debug')('server');
 
-const createIcapConnection = require('./connection.js');
+const createIcapConnection = require('../lib/connection.js');
 const createIcapRequest = require('./request.js');
 
 const DEFAULT_TRANSFER = {
