@@ -5,7 +5,7 @@
   "main": "build/server.js",
   "scripts": {
     "test": "npm run compile && mocha --timeout 5000 test/*.test.js",
-    "compile": "babel --plugins transform-async-to-generator -d build/ src/",
+    "compile": "babel --plugins transform-async-to-generator -d build/ lib/",
     "prepublish": "npm run compile"
   },
   "repository": {
@@ -23,6 +23,7 @@
   "devDependencies": {
     "babel-cli": "6.11.x",
     "babel-plugin-transform-async-to-generator": "6.8.x",
+    "babel-eslint": "6.1.x",
     "jsdox": "0.4.x",
     "body-parser": "1.15.x",
     "eslint": "^3.1.1",
