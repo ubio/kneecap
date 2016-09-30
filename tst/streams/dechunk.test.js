@@ -17,12 +17,12 @@ const UTF8_COMPONENTS = [
 ];
 
 describe('streams.Dechunk', () => {
-    const newline = Buffer.from('\n');
+    const NL = Buffer.from('\n');
 
     it('should dechunk single piece', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const string = '12345';
-        const chunk = Buffer.from(`${string.length}${newline}${string}${newline}`);
+        const chunk = Buffer.from(`${string.length}${NL}${string}${NL}`);
         stream.once('data', data => {
             expect(data.toString()).toBe(string);
             done();
@@ -31,9 +31,9 @@ describe('streams.Dechunk', () => {
     });
 
     it('should dechunk multiple pieces in a single chunk', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const string = '12345';
-        const chunk = Buffer.from(`2${newline}12${newline}3${newline}345${newline}`);
+        const chunk = Buffer.from(`2${NL}12${NL}3${NL}345${NL}`);
         stream.once('data', data => {
             expect(data.toString()).toBe(string);
             done();
@@ -42,10 +42,10 @@ describe('streams.Dechunk', () => {
     });
 
     it('should dechunk multiple UTF8 pieces in a single chunk', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const chunk = UTF8_COMPONENTS.reduce((chunk, string) => {
             const payload = Buffer.from(string);
-            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${newline}`), payload, Buffer.from(newline)]);
+            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${NL}`), payload, Buffer.from(NL)]);
             return Buffer.concat([chunk, piece]);
         }, new Buffer(0));
         stream.once('data', data => {
@@ -55,12 +55,12 @@ describe('streams.Dechunk', () => {
         stream.write(chunk);
     });
 
-    it('should dechunk pieces ending with newline', () => {
-        const stream = new Dechunk(newline);
+    it('should dechunk pieces ending with NL', () => {
+        const stream = new Dechunk(NL);
 
         for (let i = 0; i < UTF8_COMPONENTS.length; ++i) {
             const buffer = Buffer.from(UTF8_COMPONENTS[i]);
-            const chunk = Buffer.from(`${buffer.length.toString(16)}${newline}${buffer}${newline}`);
+            const chunk = Buffer.from(`${buffer.length.toString(16)}${NL}${buffer}${NL}`);
             stream.once('data', data => {
                 expect(data.toString()).toBe(UTF8_COMPONENTS[i]);
             });
@@ -69,11 +69,11 @@ describe('streams.Dechunk', () => {
     });
 
     it('should dechunk multiple pieces in multiple chunks', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const components = ['123456', '789012', 'asdqq', '123', '!@#$%^&*()'];
         const chunk = components.reduce((chunk, string) => {
             const payload = Buffer.from(string);
-            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${newline}`), payload, Buffer.from(newline)]);
+            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${NL}`), payload, Buffer.from(NL)]);
             return Buffer.concat([chunk, piece]);
         }, new Buffer(0));
         const received = [];
@@ -88,19 +88,19 @@ describe('streams.Dechunk', () => {
         done();
     });
 
-    it('should work when intermediate chunk starts with newline', done => {
-        const stream = new Dechunk(newline);
+    it('should work when intermediate chunk starts with NL', done => {
+        const stream = new Dechunk(NL);
         const components = ['01234', 'abcde', 'ABCDE', 'fghij', 'FGHIJ'];
         const chunk = components.reduce((chunk, string) => {
             const payload = Buffer.from(string);
-            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${newline}`), payload, Buffer.from(newline)]);
+            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${NL}`), payload, Buffer.from(NL)]);
             return Buffer.concat([chunk, piece]);
         }, new Buffer(0));
         const received = [];
         stream.on('data', data => {
             received.push(data);
         });
-        const step = components[0].length + newline.length - 1;
+        const step = components[0].length + NL.length - 1;
         for (let i = 0; i < chunk.length; i += step) {
             stream.write(chunk.slice(i, i + step));
         }
@@ -109,10 +109,10 @@ describe('streams.Dechunk', () => {
     });
 
     it('should dechunk multiple UTF8 pieces in multiple chunks', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const chunk = UTF8_COMPONENTS.reduce((chunk, string) => {
             const payload = Buffer.from(string);
-            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${newline}`), payload, Buffer.from(newline)]);
+            const piece = Buffer.concat([Buffer.from(`${payload.length.toString(16)}${NL}`), payload, Buffer.from(NL)]);
             return Buffer.concat([chunk, piece]);
         }, new Buffer(0));
         const received = [];
@@ -128,9 +128,9 @@ describe('streams.Dechunk', () => {
     });
 
     it('should work with 0 length chunks', done => {
-        const stream = new Dechunk(newline);
+        const stream = new Dechunk(NL);
         const string = '12345';
-        const chunk = Buffer.from(`2${newline}12${newline}0${newline}3${newline}345${newline}`);
+        const chunk = Buffer.from(`2${NL}12${NL}0${NL}3${NL}345${NL}`);
         stream.once('data', data => {
             expect(data.toString()).toBe(string);
             done();
@@ -139,8 +139,8 @@ describe('streams.Dechunk', () => {
     });
 
     it('should emit error when chunk header is invalid', done => {
-        const stream = new Dechunk(newline);
-        const chunk = Buffer.from(`2${newline}12${newline}3invalid${newline}345${newline}`);
+        const stream = new Dechunk(NL);
+        const chunk = Buffer.from(`2${NL}12${NL}3invalid${NL}345${NL}`);
         stream.on('data', data => {
             console.log('data', data.toString());
         });
@@ -152,13 +152,27 @@ describe('streams.Dechunk', () => {
     });
 
     it('should emit error when chunk is longer', done => {
-        const stream = new Dechunk(newline);
-        const chunk = Buffer.from(`2${newline}12extra${newline}3${newline}345${newline}`);
+        const stream = new Dechunk(NL);
+        const chunk = Buffer.from(`2${NL}12extra${NL}3${NL}345${NL}`);
         stream.on('data', data => {
             console.log('data', data.toString());
         });
         stream.on('error', err => {
             expect(err).toBeAn(Error);
+            done();
+        });
+        stream.write(chunk);
+    });
+
+    it('should save unconsumed buffer when error occurs', done => {
+        const stream = new Dechunk(NL);
+        const string = `2invalid${NL}12${NL}3${NL}345${NL}`;
+        const chunk = Buffer.from(string);
+        stream.on('data', data => {
+            console.log('data', data.toString());
+        });
+        stream.on('error', () => {
+            expect(stream.unconsumed.toString()).toBe(string);
             done();
         });
         stream.write(chunk);
