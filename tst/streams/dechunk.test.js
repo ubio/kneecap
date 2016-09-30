@@ -126,4 +126,41 @@ describe('streams.Dechunk', () => {
         expect(Buffer.concat(received).toString()).toBe(UTF8_COMPONENTS.join(''));
         done();
     });
+
+    it('should work with 0 length chunks', done => {
+        const stream = new Dechunk(newline);
+        const string = '12345';
+        const chunk = Buffer.from(`2${newline}12${newline}0${newline}3${newline}345${newline}`);
+        stream.once('data', data => {
+            expect(data.toString()).toBe(string);
+            done();
+        });
+        stream.write(chunk);
+    });
+
+    it('should emit error when chunk header is invalid', done => {
+        const stream = new Dechunk(newline);
+        const chunk = Buffer.from(`2${newline}12${newline}3invalid${newline}345${newline}`);
+        stream.on('data', data => {
+            console.log('data', data.toString());
+        });
+        stream.on('error', err => {
+            expect(err).toBeAn(Error);
+            done();
+        });
+        stream.write(chunk);
+    });
+
+    it('should emit error when chunk is longer', done => {
+        const stream = new Dechunk(newline);
+        const chunk = Buffer.from(`2${newline}12extra${newline}3${newline}345${newline}`);
+        stream.on('data', data => {
+            console.log('data', data.toString());
+        });
+        stream.on('error', err => {
+            expect(err).toBeAn(Error);
+            done();
+        });
+        stream.write(chunk);
+    });
 });
