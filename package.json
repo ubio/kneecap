@@ -4,7 +4,7 @@
   "description": "",
   "main": "build/server.js",
   "scripts": {
-    "test": "npm run compile && mocha --timeout 5000 tst/*.test.js",
+    "test": "npm run compile && mocha --timeout 5000 tst/*/*.test.js",
     "compile": "babel --plugins transform-async-to-generator -d build/ lib/",
     "prepublish": "npm run compile"
   },
@@ -29,7 +29,8 @@
     "eslint": "^3.1.1",
     "mocha": "2.5.x",
     "request": "2.73.x",
-    "should": "10.0.x"
+    "should": "10.0.x",
+    "expect": "1.20.x"
   },
   "dependencies": {
     "debug": "^2.2.0",
