@@ -1,6 +1,6 @@
 {
   "name": "kneecap",
-  "version": "1.6.0",
+  "version": "1.6.4",
   "description": "",
   "main": "src/server.js",
   "scripts": {

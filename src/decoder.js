@@ -67,7 +67,7 @@ module.exports = function createDecoder(socket, events) {
             allowContinue: false,
             bodyBuffer: Buffer.alloc(0)
         };
-        debug('new request', icapDetails.method, icapDetails.path);
+        debug('new request', icapDetails.method, icapDetails.path, icapDetails.headers);
         events.emit('icap-request', icapDetails);
         yield* handleEncapsulatedSections();
     }

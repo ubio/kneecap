@@ -141,6 +141,7 @@ module.exports = function createServer(options) {
                         });
                 })
                 .catch(err => {
+                    debug('caught', err);
                     events.emit('error', err);
                     if (!connection.isClosed()) {
                         connection.badRequest();
