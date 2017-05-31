@@ -15,7 +15,8 @@ module.exports = function createIcapRequest(icapDetails, connection) {
         getRawRequestHeaders,
         getRawResponseHeaders,
         getPreview,
-        getRawBody
+        getRawBody,
+        getIcapDetails
     });
 
     function hasRequestHeaders() {
@@ -77,6 +78,10 @@ module.exports = function createIcapRequest(icapDetails, connection) {
                 const [headers, body] = results;
                 return createHttpRequest(headers, body);
             });
+    }
+
+    function getIcapDetails() {
+        return icapDetails;     
     }
 };
 
