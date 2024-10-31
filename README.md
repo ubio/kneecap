@@ -200,6 +200,10 @@ Returns a promise which resolves to the request/response body as a buffer (depen
 
 Returns a promise which resolves to an [`http.ClientRequest`](https://nodejs.org/api/http.html#http_class_http_clientrequest).
 
+### getIcapDetails
+
+Returns the icapDetails object, which is the ICAP request containing the ICAP method and headers. Useful for reading headers such as `x-client-username`.
+
 -----
 
 ## Respond
