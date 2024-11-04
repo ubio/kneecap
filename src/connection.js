@@ -39,6 +39,8 @@ module.exports = function createConnection(socket) {
 
     const decoder = createDecoder(socket, events);
 
+    let fullBodyRetrieved = false;
+
     return {
         events,
         isClosed,
@@ -125,6 +127,7 @@ module.exports = function createConnection(socket) {
 
     function getFullBody() {
         assertConnected();
+        fullBodyRetrieved = true;
         const bodyType = getIcapDetails().bodyType;
         if (bodyType === 'null-body') {
             return Promise.resolve();
@@ -184,7 +187,7 @@ module.exports = function createConnection(socket) {
     function dontChange() {
         assertConnected();
         const allow = getIcapDetails().headers.get('allow') || '';
-        if (allow.includes('204') || hasPreview()) {
+        if (allow.includes('204') || (hasPreview() && !fullBodyRetrieved)) {
             return respond({
                 statusCode: 204,
                 statusText: 'No Content'
