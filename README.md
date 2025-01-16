@@ -24,7 +24,7 @@ A KC instance only allows separate endpoints per http request/response. A single
             return request.getRequestHeaders()
                 .then(headers => {
                     return {
-                        requestHeaders: headers.replace(myHeaderName, `${myHeaderName}-Changed`)
+                        requestHeaders: headers.replace(myHeaderName, `${myHeaderName}-Changed`).substring(0, -2) // the last \r\n\r\n must not be included
                     };
                 });
         });
@@ -41,7 +41,7 @@ A KC instance only allows separate endpoints per http request/response. A single
                     const oldContentLength = Number(requestHeaders.match(/content-length: (\d+)/i)[1]);
                     return {
                         requestBody: Buffer.from(requestBody.toString().replace(myFormValue, expectedBodyValue)),
-                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`)
+                        requestHeaders: requestHeaders.replace(/content-length: (\d+)/i, `Content-Length: ${oldContentLength + diff}`).substring(0, -2)
                     };
                 });
         });
@@ -226,7 +226,7 @@ kc.requestHandler('/request', function(request) {
             const [requestHeaders, requestBody] = results;
             return {
                 requestBody: Buffer.from('foo=bar'),
-                requestHeaders: requestHeaders
+                requestHeaders: requestHeaders.slice(0, -2) // the last \r\n\r\n must not be included
             };
         });
 });
